@@ -1,0 +1,13 @@
+RISK: CRITICAL
+SCORE: 95
+CONFIDENCE: HIGH ( 0.9 )
+RECORD_ID: ecc5a46e-05f2-40cb-bc5a-e797575d04ab
+WARNINGS: []
+REASONING:
+ - Phrase detected: 'I feel like giving up.'
+ - Phrase detected: 'I have decided what I need to do.'
+ - Phrase detected: 'I wrote letters to my family.'
+ - Emotion signal: unusual calm after distress
+ - Emotion signal: dissociation markers
+ - Risk indicator: explicit ideation
+INSIGHTS: {'similar_case_risk': '0%', 'best_response_success': '0%', 'data_note': 'In-memory store active (MongoDB offline). Data resets on restart.'}

@@ -1,0 +1,2 @@
+RISK: HIGH | SCORE: 75 | RECORD_ID: None
+DB STATUS: {'connected': True, 'storage': 'MongoDB Atlas', 'database': 'voiceforward', 'total_calls_logged': 0}

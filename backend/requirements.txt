@@ -7,3 +7,5 @@ faster-whisper
 sounddevice
 pydantic
 python-dotenv
+motor
+pymongo
