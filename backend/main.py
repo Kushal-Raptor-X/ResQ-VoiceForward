@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from ambient_classifier import classify_ambient_audio
 from analyzer import analyze_transcript
 from audio_capture import stream_audio_chunks
+from config.db import close_db, connect_db, get_db, is_connected
 from models import MultimodalTranscript, ProsodyFeatures, TranscriptSegment, WordTimestamp
 from prosody_analyzer import extract_prosody_features
 from transcriber import start_mock_transcription, transcribe_chunk
@@ -44,9 +45,54 @@ client_tasks: dict[str, list[asyncio.Task]] = {}
 call_sessions: dict[str, MultimodalTranscript] = {}
 
 
+# ---------------------------------------------------------------------------
+# Startup / shutdown
+# ---------------------------------------------------------------------------
+
+@fastapi_app.on_event("startup")
+async def startup():
+    """Connect to MongoDB on startup."""
+    await connect_db()
+
+
+@fastapi_app.on_event("shutdown")
+async def shutdown():
+    """Close MongoDB connection on shutdown."""
+    await close_db()
+
+
+# ---------------------------------------------------------------------------
+# REST endpoints
+# ---------------------------------------------------------------------------
+
 @fastapi_app.get("/health")
 async def health():
-    return {"status": "ok", "timestamp": int(time.time())}
+    return {
+        "status": "ok",
+        "timestamp": int(time.time()),
+        "mongodb": "connected" if is_connected() else "offline (in-memory fallback)",
+    }
+
+
+@fastapi_app.get("/db-status")
+async def db_status():
+    """Check MongoDB connection status and document counts."""
+    if not is_connected():
+        return {
+            "connected": False,
+            "storage": "in-memory",
+            "message": "MongoDB offline. Using in-memory fallback.",
+        }
+    db = get_db()
+    try:
+        count = await db.calls.count_documents({})
+        return {
+            "connected": True,
+            "storage": "MongoDB Atlas",
+            "total_calls_logged": count,
+        }
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
 
 
 def format_timestamp(elapsed_sec: float) -> str:
