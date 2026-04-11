@@ -35,7 +35,7 @@ async def log_call(
 ) -> Optional[str]:
     """
     Persist one call analysis record.
-    - Non-blocking: wrapped in asyncio.shield so caller never waits on DB failure
+    - Non-blocking: wrapped in asyncio.shield to protect against cancellation
     - No PII: session_id only, no caller name/number/location
     - Falls back to in-memory if MongoDB is offline
     Returns the record _id (MongoDB or UUID string).
