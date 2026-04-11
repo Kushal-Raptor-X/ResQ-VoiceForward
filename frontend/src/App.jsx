@@ -21,11 +21,30 @@ import { MOCK_ANALYSIS, MOCK_TRANSCRIPT } from "./mockData";
 const SOCKET_URL = "http://localhost:8000";
 const formatDuration = (s) => new Date(s * 1000).toISOString().slice(11, 19);
 
+// Initial state before call starts - neutral/waiting state
+const INITIAL_ANALYSIS = {
+  risk_level: "LOW",
+  risk_score: 0,
+  triggered_signals: ["Waiting for call data..."],
+  agent_breakdown: {
+    language_agent: "WAITING - No data yet",
+    emotion_agent: "WAITING - No data yet",
+    narrative_agent: "WAITING - No data yet"
+  },
+  conflict: "Insufficient data for analysis. Start call to begin monitoring.",
+  conflict_resolution: "",
+  suggested_response: "Waiting for call to start...",
+  operator_note: "Click 'Start Call Transcript' to begin monitoring.",
+  confidence: "UNCERTAIN",
+  ambient_signals: [],
+  resources: []
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("Live Call");
   const [elapsed, setElapsed] = useState(0);
-  const [analysis, setAnalysis] = useState(MOCK_ANALYSIS);
-  const [prevRiskLevel, setPrevRiskLevel] = useState(MOCK_ANALYSIS.risk_level);
+  const [analysis, setAnalysis] = useState(INITIAL_ANALYSIS);  // Start with initial state
+  const [prevRiskLevel, setPrevRiskLevel] = useState(INITIAL_ANALYSIS.risk_level);
   const [riskEscalated, setRiskEscalated] = useState(false);
   const [transcript, setTranscript] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
@@ -40,11 +59,12 @@ export default function App() {
 
   const RISK_ORDER = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
 
-  // Call timer
+  // Call timer - only runs when call is started
   useEffect(() => {
+    if (!callStarted) return;
     const id = window.setInterval(() => setElapsed((v) => v + 1), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [callStarted]);
 
   // Socket connection
   useEffect(() => {
@@ -87,7 +107,17 @@ export default function App() {
     return () => socket.close();
   }, [callStarted]);
 
-  const logAction = useCallback((action, resourceUsed = null) => {
+  const handleStopCall = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.close();
+    }
+    setCallStarted(false);
+    setConnected(false);
+    setElapsed(0);
+    setTranscript([]);
+    setAnalysis(INITIAL_ANALYSIS);
+    setAuditLog([]);
+  }, []);
     const entry = {
       action,
       suggestion: analysis.suggested_response,
@@ -206,6 +236,20 @@ export default function App() {
 
       {/* Header */}
       <header className="header-bar text-[var(--color-text-secondary)]">
+        {/* Live indicator - always visible when call is active */}
+        {callStarted && (
+          <span className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)]">
+            <span className="live-dot" style={{ color: connected ? "var(--risk-high-text)" : "var(--color-text-muted)" }}>●</span>
+            <span>{connected ? "Live" : "Demo"}</span>
+          </span>
+        )}
+        
+        <span className="font-bold text-[var(--color-text-primary)]">ResQ VoiceForward</span>
+        <span>|</span>
+        <span className="text-[13px] uppercase">Operator: Priya</span>
+        <span>|</span>
+        
+        {/* Start/Stop button */}
         {!callStarted ? (
           <button
             type="button"
@@ -213,17 +257,19 @@ export default function App() {
             className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)] px-3 py-1 rounded border border-[var(--verdict-low)] text-[var(--verdict-low)] hover:bg-[var(--btn-accept-bg)] transition-colors"
           >
             <span>▶</span>
-            <span>Start Call Transcript</span>
+            <span>Start Call</span>
           </button>
         ) : (
-          <span className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)]">
-            <span className="live-dot" style={{ color: connected ? "var(--risk-high-text)" : "var(--color-text-muted)" }}>●</span>
-            <span>{connected ? "Live" : "Demo"}</span>
-          </span>
+          <button
+            type="button"
+            onClick={handleStopCall}
+            className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)] px-3 py-1 rounded border border-[var(--risk-high-border)] text-[var(--risk-high-text)] hover:bg-[var(--btn-reject-bg)] transition-colors"
+          >
+            <span>■</span>
+            <span>Stop Call</span>
+          </button>
         )}
-        <span className="font-bold text-[var(--color-text-primary)]">ResQ VoiceForward</span>
-        <span>|</span>
-        <span className="text-[13px] uppercase">Operator: Priya</span>
+        
         <span>|</span>
         <span className="text-[var(--color-text-primary)]">{formatDuration(elapsed)}</span>
         <span>|</span>
