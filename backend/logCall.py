@@ -58,7 +58,7 @@ async def log_call(
     if db is not None:
         try:
             model = CallModel(db)
-            record_id = await model.save(doc)  # direct await — no shield swallowing errors
+            record_id = await asyncio.shield(model.save(doc))
             if record_id:
                 print(f"[logCall] ✓ Saved to Atlas (id={record_id}, risk={risk_level})")
                 return record_id
