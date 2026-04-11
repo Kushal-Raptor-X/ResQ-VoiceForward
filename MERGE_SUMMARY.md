@@ -24,8 +24,27 @@
 - **RiskIndicator.jsx** — Large risk score + triggered signals + glow animation
 - **AgentPanel.jsx** — 3 agent cards (Language/Emotion/Narrative) + conflict resolution
 - **SuggestionCard.jsx** — Suggested response + operator note + Accept/Modify/Reject buttons
+- **AuditLog.jsx** — Operator action audit log (Layer 5)
+- **SupervisorDashboard.jsx** — Supervisor dashboard (Layer 4)
 - **index.css** — CLAUDE.md design system (dark theme, risk colors, monospace fonts)
 - **mockData.js** — Mock analysis + transcript for fallback
+
+### ✅ Layer 4 & 5 Infrastructure (from ui-integration-main)
+- **MCP/** — Multi-agent conflict resolution
+  - `agents/` — Context, decision, LLM, ML, rule agents
+  - `compliance_india.py` — DPDPA 2023 compliance
+  - `privacy_filter.py` — PII filtering
+  - `longitudinal_store.py` — Pattern storage
+  - `transparency.py` — Reasoning transparency
+  - `audit_logger.py` — Immutable audit logs
+- **backend/database.py** — MongoDB integration
+- **backend/learning.py** — Longitudinal learning insights
+- **backend/mongo_audit.py** — Call audit logging
+- **backend/privacy_filter.py** — Privacy enforcement
+- **backend/schemas.py** — Pydantic schemas
+- **backend/config/** — Database configuration
+- **node-backend/** — Node.js backend alternative
+- **realtime_backend/** — Real-time analysis backend with WebSocket
 
 ### ✅ Socket.io Integration
 - Real-time `analysis_update` events from backend → frontend
@@ -107,10 +126,23 @@ npm run dev
 - `frontend/src/components/RiskIndicator.jsx` ✅
 - `frontend/src/components/TranscriptPanel.jsx` ✅
 - `frontend/src/components/AgentPanel.jsx` ✅
+- `frontend/src/components/AuditLog.jsx` ✅ (Layer 5)
+- `frontend/src/components/SupervisorDashboard.jsx` ✅ (Layer 4)
 - `frontend/src/index.css` ✅ (CLAUDE.md design system)
-- `frontend/src/App.jsx` ✅ (simplified, working)
+- `frontend/src/App.jsx` ✅ (simplified to work with available components)
 - `frontend/src/mockData.js` ✅
 - `frontend/package.json` ✅
+
+**Layer 4 & 5 Infrastructure (from ui-integration-main):**
+- `MCP/` (54 files) ✅ — Multi-agent conflict resolution
+- `backend/database.py` ✅ — MongoDB integration
+- `backend/learning.py` ✅ — Longitudinal learning
+- `backend/mongo_audit.py` ✅ — Audit logging
+- `backend/privacy_filter.py` ✅ — Privacy enforcement
+- `backend/schemas.py` ✅ — Pydantic schemas
+- `backend/config/` ✅ — Database config
+- `node-backend/` (8 files) ✅ — Node.js backend
+- `realtime_backend/` (11 files) ✅ — Real-time backend
 
 **Backend (from k_changes_1 — unchanged):**
 - `backend/analyzer.py` ✅
@@ -125,13 +157,12 @@ npm run dev
 
 ## Known Limitations (For Now)
 
-- ❌ No NavBar/tabs (can add later)
-- ❌ No AmbientPanel (can add later)
-- ❌ No AuditLog (can add later)
-- ❌ No SupervisorDashboard (can add later)
-- ❌ No DisclosureBanner (can add later)
+- ⚠️ Layer 4 & 5 components added but not yet integrated into main App.jsx
+- ⚠️ MongoDB connection needs to be configured in backend/.env
+- ⚠️ Node.js backend and realtime_backend are alternatives (not used by default)
+- ⚠️ SupervisorDashboard and AuditLog components exist but not wired into App.jsx yet
 
-These are **non-critical** for MVP. Focus on getting the core 4 components working first.
+These are **non-critical** for MVP. Focus on getting the core 4 components working first, then integrate Layer 4/5 as needed.
 
 ---
 
