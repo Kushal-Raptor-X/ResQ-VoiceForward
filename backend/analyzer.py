@@ -9,11 +9,14 @@ from models import RiskAnalysis
 
 load_dotenv()
 
-client = AsyncOpenAI(
-    api_key=os.getenv("FEATHERLESS_API_KEY"),
-    base_url="https://api.featherless.ai/v1",
-)
 MODEL_NAME = "deepseek-ai/DeepSeek-V3-0324"
+
+
+def _get_client() -> AsyncOpenAI:
+    api_key = os.getenv("FEATHERLESS_API_KEY")
+    if not api_key:
+        raise ValueError("FEATHERLESS_API_KEY is not set in environment")
+    return AsyncOpenAI(api_key=api_key, base_url="https://api.featherless.ai/v1")
 
 
 def _extract_json(content: str) -> dict:
@@ -25,6 +28,7 @@ def _extract_json(content: str) -> dict:
 
 async def analyze_transcript(transcript_text: str) -> RiskAnalysis:
     try:
+        client = _get_client()
         response = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[

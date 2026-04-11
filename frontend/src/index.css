@@ -74,10 +74,10 @@
 html, body, #root { height: 100%; }
 body { background: #0a0a0a; font-family: var(--font-ui); color: var(--color-text-primary); margin: 0; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-.app-shell { display: grid; grid-template-rows: 40px 1fr; grid-template-columns: 55fr 45fr; height: 100vh; width: 100vw; background: var(--color-bg-base); gap: 0; }
-.header-bar { grid-column: 1 / -1; background: var(--color-bg-panel); border-bottom: 1px solid var(--color-border-strong); display: flex; align-items: center; padding: 0 var(--space-4); gap: var(--space-4); }
-.left-panel { border-right: 1px solid var(--color-border-strong); overflow-y: auto; padding: var(--space-4); }
-.right-panel { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); overflow-y: auto; }
+.app-shell { display: grid; grid-template-rows: 40px 1fr; grid-template-columns: 140px 55fr 45fr; height: 100vh; width: 100vw; background: var(--color-bg-base); gap: 0; overflow: hidden; }
+.header-bar { grid-column: 2 / -1; grid-row: 1; background: var(--color-bg-panel); border-bottom: 1px solid var(--color-border-strong); display: flex; align-items: center; padding: 0 var(--space-4); gap: var(--space-4); }
+.left-panel { grid-column: 2; grid-row: 2; border-right: 1px solid var(--color-border-strong); overflow-y: auto; padding: var(--space-4); }
+.right-panel { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); overflow-y: auto; }
 .live-dot { animation: pulse 1.5s ease-in-out infinite; }
 .panel-card { background: var(--color-bg-panel); border: 1px solid var(--color-border); border-radius: 8px; padding: var(--space-4); }
 .section-label { color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); letter-spacing: var(--letter-spacing-caps); text-transform: uppercase; }
@@ -86,3 +86,85 @@ body { background: #0a0a0a; font-family: var(--font-ui); color: var(--color-text
 .quote-box { border-left: 3px solid var(--risk-medium-border); color: var(--color-text-primary); font-size: var(--font-size-base); font-style: italic; line-height: var(--line-height-base); margin: 0; padding: var(--space-3); }
 .action-button { background: transparent; border: 1px solid var(--button-border); border-radius: 8px; color: var(--button-text); cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: var(--font-weight-bold); letter-spacing: var(--letter-spacing-caps); min-height: 40px; text-transform: uppercase; transition: background-color 0.2s ease, color 0.2s ease; }
 .action-button:hover { background: var(--button-bg); }
+
+/* NavBar container - vertical sidebar */
+.nav-bar {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  background: var(--color-bg-panel);
+  border-right: 1px solid var(--color-border-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-6) 0;
+  gap: var(--space-2);
+}
+
+/* Individual tab button - vertical */
+.nav-tab {
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  padding: var(--space-3) var(--space-4);
+  text-transform: uppercase;
+  text-align: left;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.nav-tab:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-panel-hover);
+}
+
+/* Active tab state - vertical */
+.nav-tab--active {
+  border-left-color: var(--risk-high-border);
+  color: var(--color-text-primary);
+  background: var(--color-bg-panel-hover);
+}
+
+/* Dashboard full-width content area */
+.dashboard-view {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  overflow-y: auto;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Metrics row — 3 equal columns */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+/* Metric card value text */
+.metric-value {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin-top: var(--space-2);
+}
+
+/* Recent calls list row */
+.recent-call-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+}
+
+.recent-call-row:last-child {
+  border-bottom: none;
+}
