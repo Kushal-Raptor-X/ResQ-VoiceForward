@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VoiceForward — Real-Time Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #f0f0f0; font-family: 'Courier New', monospace; padding: 20px; }
+  h1 { color: #ef4444; margin-bottom: 20px; font-size: 18px; letter-spacing: 0.1em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .panel { background: #111; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; }
+  .panel h2 { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .risk-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: bold; }
+  .LOW    { background: #0d1f0d; color: #22c55e; border: 1px solid #22c55e; }
+  .MEDIUM { background: #1f1a0d; color: #f59e0b; border: 1px solid #f59e0b; }
+  .HIGH   { background: #1f0d0d; color: #ef4444; border: 1px solid #ef4444; }
+  .CRITICAL { background: #2d0505; color: #ff0000; border: 1px solid #ff0000; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  #input-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  #text-input { flex: 1; background: #1a1a1a; border: 1px solid #3a3a3a; color: #f0f0f0;
+    padding: 10px; border-radius: 6px; font-family: inherit; font-size: 14px; }
+  button { background: #1f0d0d; border: 1px solid #ef4444; color: #ef4444; padding: 10px 20px;
+    border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; text-transform: uppercase; }
+  button:hover { background: #ef4444; color: #fff; }
+  #log { height: 200px; overflow-y: auto; font-size: 12px; color: #888; }
+  #log .entry { padding: 4px 0; border-bottom: 1px solid #1a1a1a; }
+  #log .entry.analysis { color: #f0f0f0; }
+  #log .entry.suggestion { color: #a78bfa; }
+  #log .entry.warning { color: #f59e0b; }
+  .resource-item { font-size: 12px; color: #888; padding: 4px 0; border-bottom: 1px solid #1a1a1a; }
+  .resource-item strong { color: #f0f0f0; }
+  #latency { font-size: 11px; color: #555; }
+  #status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #555; margin-right: 6px; }
+  #status-dot.connected { background: #22c55e; animation: pulse 2s infinite; }
+</style>
+</head>
+<body>
+<h1>⚡ VoiceForward — Real-Time Multi-Agent Demo</h1>
+
+<div id="input-row">
+  <input id="text-input" type="text" placeholder='Try: "I feel chest pain" or "I want to end my life"' />
+  <button onclick="sendText()">Send [Enter]</button>
+  <button onclick="runDemo()">Run Demo</button>
+</div>
+
+<div style="margin-bottom:12px; font-size:12px;">
+  <span id="status-dot"></span>
+  <span id="status-text" style="color:#555">Disconnected</span>
+  <span id="latency" style="margin-left:16px"></span>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Live Analysis</h2>
+    <div style="margin-bottom:12px">
+      <span id="risk-badge" class="risk-badge LOW">LOW</span>
+      <span id="confidence" style="font-size:12px;color:#888;margin-left:8px"></span>
+    </div>
+    <div id="emotion" style="font-size:13px;color:#888;margin-bottom:8px"></div>
+    <div id="signals" style="font-size:12px;color:#555"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Resources</h2>
+    <div id="resource-type" style="font-size:11px;color:#888;margin-bottom:8px;text-transform:uppercase"></div>
+    <div id="resources"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Live Report</h2>
+    <div id="summary" style="font-size:13px;color:#888;line-height:1.6"></div>
+    <div id="action" style="font-size:12px;color:#ef4444;margin-top:8px;font-weight:bold"></div>
+  </div>
+
+  <div class="panel">
+    <h2>AI Suggestion (async)</h2>
+    <div id="suggestion-response" style="font-size:13px;color:#a78bfa;font-style:italic;line-height:1.6"></div>
+    <div id="suggestion-question" style="font-size:12px;color:#888;margin-top:8px"></div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:16px">
+  <h2>Event Log</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+let ws = null;
+let sessionId = null;
+
+function connect() {
+  ws = new WebSocket('ws://localhost:8001/ws/stream');
+  ws.onopen = () => {
+    document.getElementById('status-dot').className = 'connected';
+    document.getElementById('status-text').textContent = 'Connected';
+    log('Connected to VoiceForward backend', 'info');
+  };
+  ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+  ws.onclose = () => {
+    document.getElementById('status-dot').className = '';
+    document.getElementById('status-text').textContent = 'Disconnected — reconnecting...';
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => log('WebSocket error', 'warning');
+}
+
+function handleMessage(msg) {
+  if (msg.type === 'connected') {
+    sessionId = msg.session_id;
+    log(`Session: ${sessionId.slice(0,8)}...`, 'info');
+    return;
+  }
+  if (msg.type === 'partial') {
+    document.getElementById('latency').textContent = `STT: ${msg.latency_ms}ms`;
+    return;
+  }
+  if (msg.type === 'analysis') {
+    const a = msg.analysis;
+    const badge = document.getElementById('risk-badge');
+    badge.textContent = a.risk;
+    badge.className = `risk-badge ${a.risk}`;
+    document.getElementById('confidence').textContent = `${Math.round(a.confidence * 100)}% conf`;
+    document.getElementById('emotion').textContent = `Emotion: ${a.emotion}`;
+    document.getElementById('signals').textContent = a.signals?.join(' · ') || '';
+    document.getElementById('latency').textContent = `Pipeline: ${msg.pipeline_ms}ms`;
+
+    const r = msg.resources;
+    if (r) {
+      document.getElementById('resource-type').textContent = r.type;
+      document.getElementById('resources').innerHTML = (r.resources || []).slice(0,3).map(res =>
+        `<div class="resource-item"><strong>${res.name}</strong> ${res.phone !== 'N/A' ? '· ' + res.phone : ''}</div>`
+      ).join('');
+    }
+
+    const rep = msg.report;
+    if (rep) {
+      document.getElementById('summary').textContent = rep.summary;
+      document.getElementById('action').textContent = rep.recommended_action;
+    }
+
+    log(`[${a.risk}] "${msg.text}" — ${msg.pipeline_ms}ms`, 'analysis');
+    return;
+  }
+  if (msg.type === 'suggestion') {
+    const s = msg.suggestion;
+    document.getElementById('suggestion-response').textContent = `"${s.empathetic_response}"`;
+    document.getElementById('suggestion-question').textContent = `↳ ${s.follow_up_question}`;
+    log(`Suggestion ready (${s.model})`, 'suggestion');
+    return;
+  }
+  if (msg.type === 'warning') {
+    log(`⚠ ${msg.message}`, 'warning');
+  }
+}
+
+function log(text, type = 'info') {
+  const el = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = `entry ${type}`;
+  div.textContent = `${new Date().toLocaleTimeString()} — ${text}`;
+  el.prepend(div);
+  if (el.children.length > 50) el.removeChild(el.lastChild);
+}
+
+function sendText() {
+  const input = document.getElementById('text-input');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'text', text, session_id: sessionId }));
+  input.value = '';
+}
+
+const DEMO_SCRIPT = [
+  "Hello, I'm not feeling well today",
+  "I feel chest pain and can't breathe properly",
+  "I've been thinking about ending my life",
+  "I have a plan. I've decided what I need to do.",
+];
+
+let demoIdx = 0;
+function runDemo() {
+  if (demoIdx >= DEMO_SCRIPT.length) { demoIdx = 0; }
+  document.getElementById('text-input').value = DEMO_SCRIPT[demoIdx++];
+  sendText();
+  if (demoIdx < DEMO_SCRIPT.length) setTimeout(runDemo, 3000);
+}
+
+document.getElementById('text-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendText();
+});
+
+connect();
+</script>
+</body>
+</html>
