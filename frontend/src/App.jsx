@@ -30,6 +30,7 @@ export default function App() {
   const [transcript, setTranscript] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [connected, setConnected] = useState(false);
+  const [callStarted, setCallStarted] = useState(false);  // Track if call has been started
   const [showSupervisor, setShowSupervisor] = useState(false);
   const [disclosureDismissed, setDisclosureDismissed] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(true);       // Layer 3: opt-out
@@ -47,6 +48,8 @@ export default function App() {
 
   // Socket connection
   useEffect(() => {
+    if (!callStarted) return; // Only connect when call is started
+    
     const socket = io(SOCKET_URL, { transports: ["websocket", "polling"] });
     socketRef.current = socket;
 
@@ -82,7 +85,7 @@ export default function App() {
     });
 
     return () => socket.close();
-  }, []);
+  }, [callStarted]);
 
   const logAction = useCallback((action, resourceUsed = null) => {
     const entry = {
@@ -203,11 +206,22 @@ export default function App() {
 
       {/* Header */}
       <header className="header-bar text-[var(--color-text-secondary)]">
-        <span className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)]">
-          <span className="live-dot" style={{ color: connected ? "var(--risk-high-text)" : "var(--color-text-muted)" }}>●</span>
-          <span>{connected ? "Live" : "Demo"}</span>
-        </span>
-        <span className="font-bold text-[var(--color-text-primary)]">VoiceForward</span>
+        {!callStarted ? (
+          <button
+            type="button"
+            onClick={() => setCallStarted(true)}
+            className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)] px-3 py-1 rounded border border-[var(--verdict-low)] text-[var(--verdict-low)] hover:bg-[var(--btn-accept-bg)] transition-colors"
+          >
+            <span>▶</span>
+            <span>Start Call Transcript</span>
+          </button>
+        ) : (
+          <span className="flex items-center gap-2 text-[11px] uppercase tracking-[var(--letter-spacing-caps)]">
+            <span className="live-dot" style={{ color: connected ? "var(--risk-high-text)" : "var(--color-text-muted)" }}>●</span>
+            <span>{connected ? "Live" : "Demo"}</span>
+          </span>
+        )}
+        <span className="font-bold text-[var(--color-text-primary)]">ResQ VoiceForward</span>
         <span>|</span>
         <span className="text-[13px] uppercase">Operator: Priya</span>
         <span>|</span>
