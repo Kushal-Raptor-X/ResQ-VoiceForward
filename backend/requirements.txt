@@ -3,7 +3,10 @@ uvicorn
 python-socketio
 python-multipart
 openai
-faster-whisper
+aiohttp
 sounddevice
+scipy
+librosa
+numpy
 pydantic
 python-dotenv

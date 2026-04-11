@@ -58,8 +58,10 @@ MOCK_ANALYSIS = {
 }
 
 MOCK_TRANSCRIPT = [
-    {"time": "00:01:12", "speaker": "CALLER", "text": "I've been feeling really low lately.", "isRisk": False},
-    {"time": "00:02:34", "speaker": "OPERATOR", "text": "Can you tell me more about that?", "isRisk": False},
-    {"time": "00:03:45", "speaker": "CALLER", "text": "I've been thinking about this for weeks now.", "isRisk": True},
-    {"time": "00:04:20", "speaker": "CALLER", "text": "I think I've finally decided what I need to do.", "isRisk": True},
+    {"time": "00:00:10", "speaker": "CALLER", "text": "Hi, I've been feeling really low lately. Work is tough, relationships aren't great. I don't know who to talk to.", "isRisk": False},
+    {"time": "00:00:18", "speaker": "OPERATOR", "text": "I'm here to listen. Can you tell me more about what's been happening?", "isRisk": False},
+    {"time": "00:00:30", "speaker": "CALLER", "text": "I've been thinking about this for weeks now. I just... I don't see a way forward anymore.", "isRisk": True},
+    {"time": "00:00:40", "speaker": "OPERATOR", "text": "That sounds really difficult. What does 'a way forward' mean to you?", "isRisk": False},
+    {"time": "00:00:55", "speaker": "CALLER", "text": "Actually... I think I've finally decided what I need to do. I feel very calm about it now.", "isRisk": True},
+    {"time": "00:01:05", "speaker": "OPERATOR", "text": "Can you tell me more about what you've decided?", "isRisk": False},
 ]

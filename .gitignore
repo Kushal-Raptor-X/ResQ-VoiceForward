@@ -31,5 +31,8 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Kiro IDE settings (personal workflow)
+.kiro/
+
 # Logs
 *.log
