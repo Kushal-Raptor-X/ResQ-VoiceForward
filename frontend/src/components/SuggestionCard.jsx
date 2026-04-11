@@ -1,42 +1,41 @@
 const actions = [
-  { label: "Accept", onClickKey: "onAccept", bg: "var(--btn-accept-bg)", border: "var(--btn-accept-border)", text: "var(--btn-accept-text)" },
-  { label: "Modify", onClickKey: "onModify", bg: "var(--btn-modify-bg)", border: "var(--btn-modify-border)", text: "var(--btn-modify-text)" },
-  { label: "Reject", onClickKey: "onReject", bg: "var(--btn-reject-bg)", border: "var(--btn-reject-border)", text: "var(--btn-reject-text)" },
+  { label: "✓ Accept", hint: "[A]", key: "onAccept", bg: "var(--btn-accept-bg)", border: "var(--btn-accept-border)", text: "var(--btn-accept-text)" },
+  { label: "✎ Modify", hint: "[M]", key: "onModify", bg: "var(--btn-modify-bg)", border: "var(--btn-modify-border)", text: "var(--btn-modify-text)" },
+  { label: "✗ Reject", hint: "[R]", key: "onReject", bg: "var(--btn-reject-bg)", border: "var(--btn-reject-border)", text: "var(--btn-reject-text)" },
 ];
 
-export default function SuggestionCard(props) {
+export default function SuggestionCard({ suggestedResponse, operatorNote, onAccept, onModify, onReject }) {
+  const handlers = { onAccept, onModify, onReject };
+
   return (
     <section className="panel-card">
-      <p className="section-label">Suggested Response</p>
-      <blockquote className="quote-box mt-3">{props.suggestedResponse}</blockquote>
-      <div className="mt-4">
-        <p className="section-label">Operator Note:</p>
-        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">{props.operatorNote}</p>
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <p className="section-label">What to Say Next</p>
+      <blockquote className="quote-box mt-3">{suggestedResponse}</blockquote>
+
+      {operatorNote && (
+        <div className="mt-3 rounded border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2">
+          <p className="section-label">Operator Note</p>
+          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">{operatorNote}</p>
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
         {actions.map((action) => (
           <button
             key={action.label}
             type="button"
             className="action-button"
-            onClick={props[action.onClickKey]}
+            onClick={handlers[action.key]}
             style={{
               "--button-bg": action.bg,
               "--button-border": action.border,
               "--button-text": action.text,
             }}
           >
-            {action.label}
+            <span>{action.label}</span>
+            <span style={{ display: "block", fontSize: 10, opacity: 0.5, marginTop: 2 }}>{action.hint}</span>
           </button>
         ))}
-      </div>
-      <div className="mt-4 min-h-10 rounded-lg border border-[var(--color-border)] px-3 py-2">
-        <p className="section-label">Layer 5 Audit</p>
-        <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-          {props.lastAction
-            ? `${props.lastAction.action} recorded at ${props.lastAction.timestamp}`
-            : "No operator action recorded yet."}
-        </p>
       </div>
     </section>
   );
