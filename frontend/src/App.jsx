@@ -118,6 +118,8 @@ export default function App() {
     setAnalysis(INITIAL_ANALYSIS);
     setAuditLog([]);
   }, []);
+
+  const logAction = useCallback((action, resourceUsed = null) => {
     const entry = {
       action,
       suggestion: analysis.suggested_response,
