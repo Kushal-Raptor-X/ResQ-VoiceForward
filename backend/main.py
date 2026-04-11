@@ -88,8 +88,9 @@ async def emit_analysis_loop(sid: str):
             # Emit to frontend
             await sio.emit("analysis_update", analysis.model_dump(), to=sid)
             
-            # Analyze every 15 seconds (fast enough for real-time, slow enough to avoid rate limits)
-            await asyncio.sleep(15)
+            # Analyze every 4 seconds for responsive real-time demo
+            # (Safe with DeepSeek-V3 typical 3-5s response time)
+            await asyncio.sleep(4)
             
         except Exception as e:
             logger.error(f"Analysis loop error: {e}", exc_info=True)
