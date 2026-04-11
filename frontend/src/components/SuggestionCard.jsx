@@ -5,7 +5,11 @@ export default function SuggestionCard(props) {
         <h3 className="text-sm font-bold text-white">SUGGESTED RESPONSE</h3>
         <blockquote className="mt-3 text-base italic leading-relaxed text-[#e5e5e5]">
           "{props.suggestedResponse}"
-        </blockquote>
+    
+    
+    
+    
+    </blockquote>
         <div className="mt-4">
           <p className="text-sm font-bold text-white">NOTE:</p>
           <p className="mt-1 text-sm text-[#b0b0b0]">{props.operatorNote}</p>
