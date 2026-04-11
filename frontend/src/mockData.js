@@ -1,3 +1,16 @@
+/**
+ * Mock data for demo/fallback purposes only.
+ * 
+ * IMPORTANT: This data is NEVER stored in browser storage.
+ * It's only used:
+ * 1. As fallback when backend is unreachable
+ * 2. For initial UI state before real data arrives
+ * 3. For development/testing
+ * 
+ * All persistent data is stored in backend (MongoDB/in-memory).
+ * No localStorage, sessionStorage, or IndexedDB is used.
+ */
+
 export const MOCK_ANALYSIS = {
   risk_level: "HIGH",
   risk_score: 78,

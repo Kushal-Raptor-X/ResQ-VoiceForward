@@ -41,13 +41,18 @@ const INITIAL_ANALYSIS = {
 };
 
 export default function App() {
+  // ═══════════════════════════════════════════════════════════════════════
+  // SESSION STATE (IN-MEMORY ONLY - CLEARED ON CALL END)
+  // No browser storage (localStorage/sessionStorage) is used.
+  // All persistent data is stored in backend via API calls.
+  // ═══════════════════════════════════════════════════════════════════════
   const [activeTab, setActiveTab] = useState("Live Call");
   const [elapsed, setElapsed] = useState(0);
   const [analysis, setAnalysis] = useState(INITIAL_ANALYSIS);  // Start with initial state
   const [prevRiskLevel, setPrevRiskLevel] = useState(INITIAL_ANALYSIS.risk_level);
   const [riskEscalated, setRiskEscalated] = useState(false);
-  const [transcript, setTranscript] = useState([]);
-  const [auditLog, setAuditLog] = useState([]);
+  const [transcript, setTranscript] = useState([]);  // Current session only
+  const [auditLog, setAuditLog] = useState([]);      // Current session only - sent to backend
   const [connected, setConnected] = useState(false);
   const [callStarted, setCallStarted] = useState(false);  // Track if call has been started
   const [showSupervisor, setShowSupervisor] = useState(false);

@@ -1,3 +1,6 @@
+"""
+Pydantic schemas for API requests/responses and data structures.
+"""
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field

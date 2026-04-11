@@ -256,6 +256,13 @@ async def emit_analysis_loop(sid: str):
             transcript_text = "\n".join([f"[{seg.time}] {seg.speaker}: {seg.text}" for seg in session.segments])
             
             try:
+                # Convert agent_breakdown to dict if it's a Pydantic model
+                agent_verdicts_dict = (
+                    analysis.agent_breakdown.model_dump() 
+                    if hasattr(analysis.agent_breakdown, 'model_dump') 
+                    else analysis.agent_breakdown
+                )
+                
                 record_id = await log_call(
                     db=db,
                     session_id=sid,
@@ -265,7 +272,7 @@ async def emit_analysis_loop(sid: str):
                     risk_score=analysis.risk_score,
                     confidence=analysis.confidence,
                     reasoning=[analysis.conflict_resolution or analysis.conflict],
-                    agent_verdicts=analysis.agent_breakdown,
+                    agent_verdicts=agent_verdicts_dict,
                     triggered_signals=analysis.triggered_signals,
                     suggested_response=analysis.suggested_response,
                     operator_action="pending",
@@ -273,7 +280,7 @@ async def emit_analysis_loop(sid: str):
                 )
                 logger.info(f"✓ Logged to database: {record_id}")
             except Exception as log_error:
-                logger.error(f"Failed to log call: {log_error}")
+                logger.error(f"Failed to log call: {log_error}", exc_info=True)
             
             # Emit to frontend
             await sio.emit("analysis_update", analysis.model_dump(), to=sid)

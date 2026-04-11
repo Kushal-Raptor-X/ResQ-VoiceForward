@@ -10,3 +10,4 @@ librosa
 numpy
 pydantic
 python-dotenv
+motor
