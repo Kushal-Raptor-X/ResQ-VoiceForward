@@ -38,3 +38,9 @@ export const MOCK_TRANSCRIPT = [
   { time: "00:02:35", speaker: "CALLER", text: "I feel very calm about it now. I've made my peace.", isRisk: true },
   { time: "00:03:05", speaker: "CALLER", text: "I wrote letters. To my family. Just in case.", isRisk: true },
 ];
+
+export const MOCK_RECENT_CALLS = [
+  { id: "CALL-0041", operator: "Priya", callerId: "MH-2847", duration: "04:32", language: "Hindi/English", riskLevel: "CRITICAL", riskScore: 94 },
+  { id: "CALL-0042", operator: "Arjun", callerId: "KA-1923", duration: "08:15", language: "Kannada", riskLevel: "MEDIUM", riskScore: 45 },
+  { id: "CALL-0043", operator: "Sneha", callerId: "DL-4102", duration: "02:10", language: "English", riskLevel: "LOW", riskScore: 18 },
+];

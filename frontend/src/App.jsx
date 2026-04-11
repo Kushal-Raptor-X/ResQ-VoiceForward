@@ -18,6 +18,7 @@ const SOCKET_URL = "http://localhost:8000";
 const formatDuration = (s) => new Date(s * 1000).toISOString().slice(11, 19);
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState("Live Call");
   const [elapsed, setElapsed] = useState(0);
   const [analysis, setAnalysis] = useState(MOCK_ANALYSIS);
   const [prevRiskLevel, setPrevRiskLevel] = useState(MOCK_ANALYSIS.risk_level);
@@ -113,6 +114,48 @@ export default function App() {
   if (showSupervisor) {
     return <SupervisorDashboard auditLog={auditLog} onClose={() => setShowSupervisor(false)} />;
   }
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Only handle shortcuts when on Live Call tab and not typing in an input
+      if (activeTab !== "Live Call" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case "a":
+          e.preventDefault();
+          logAction("ACCEPT");
+          break;
+        case "m":
+          e.preventDefault();
+          logAction("MODIFY");
+          break;
+        case "r":
+          e.preventDefault();
+          logAction("REJECT");
+          break;
+        case " ":
+          e.preventDefault();
+          console.log("Toggle call recording");
+          break;
+        case "escape":
+          e.preventDefault();
+          console.log("Dismiss alert");
+          break;
+        case "tab":
+          e.preventDefault();
+          console.log("Next panel");
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [activeTab]);
 
   return (
     <div className={`app-shell font-mono${riskEscalated ? " risk-escalation-flash" : ""}`}>
