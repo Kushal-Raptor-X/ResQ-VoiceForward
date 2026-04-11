@@ -20,6 +20,71 @@ export const MOCK_ANALYSIS = {
   confidence: "HIGH",
 };
 
+// New detailed agent explanation data
+export const MOCK_AGENT_EXPLANATION = {
+  language_agent: {
+    level: "HIGH",
+    detected: "I've decided",
+    pattern: "Finality language detected",
+    confidence: 82,
+  },
+  emotion_agent: {
+    level: "MEDIUM",
+    detected: "Flat tone",
+    pattern: "Low emotional variation",
+    confidence: 65,
+  },
+  narrative_agent: {
+    level: "HIGH",
+    detected: "Conclusion phrasing",
+    pattern: "Story reaching endpoint",
+    confidence: 78,
+  },
+  conflict:
+    "Language and Narrative agents indicate HIGH risk. Emotion agent indicates MEDIUM. Defaulting to HIGH per conservative policy.",
+};
+
+// Multi-agent conflict resolution data
+export const MOCK_CONFLICT_RESOLUTION = {
+  final_risk: "HIGH",
+  confidence_summary: "MODERATE",
+  uncertainty: true,
+  explanation: `I'm flagging HIGH risk because:
+• The Language Agent detected 'I've decided', 'final statements' — finality language detected
+• The Narrative Agent detected 'story conclusion pattern' — narrative reaching endpoint
+• The Emotion Agent detected 'flat tone' — low emotional variation
+
+There is some uncertainty because:
+• The Ambient Audio Agent did not detect strong risk signals
+• Confidence levels vary significantly across agents
+• Due to conflicting signals, the system is defaulting to HIGH risk as a safety measure`,
+  contributing_factors: [
+    "Finality language detected",
+    "Narrative reaching endpoint",
+    "Low emotional variation",
+  ],
+  conflicting_signals: [
+    "Some agents indicate HIGH risk while others indicate LOW",
+  ],
+  agent_votes: {
+    "Language Agent": "HIGH",
+    "Emotion Agent": "MEDIUM",
+    "Ambient Audio Agent": "LOW",
+    "Narrative Agent": "HIGH",
+  },
+  weighted_score: 2.73,
+};
+
+// Live distress indicators data
+export const MOCK_DISTRESS_INDICATORS = {
+  distress_intensity: 72,
+  cognitive_coherence: 45,
+  agitation: 38,
+  dissociation: 28,
+  suicidal_ideation: 65,
+  operator_fatigue: 42,
+};
+
 export const MOCK_TRANSCRIPT = [
   { time: "00:01:12", speaker: "CALLER", text: "I've been feeling really low lately.", isRisk: false },
   { time: "00:02:34", speaker: "OPERATOR", text: "Can you tell me more about that?", isRisk: false },

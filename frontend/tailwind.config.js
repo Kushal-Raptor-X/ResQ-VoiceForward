@@ -12,7 +12,8 @@ export default {
         base: "#0a0a0a",
       },
       fontFamily: {
-        mono: ['"JetBrains Mono"', '"IBM Plex Mono"', "monospace"],
+        sans: ['"Nexa Serif"', 'Georgia', 'serif'],
+        mono: ['"JetBrains Mono"', '"Consolas"', 'monospace'],
       },
     },
   },
