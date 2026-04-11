@@ -13,6 +13,7 @@ from ambient_classifier import classify_ambient_audio
 from analyzer import analyze_transcript
 from audio_capture import stream_audio_chunks
 from config.db import close_db, connect_db, get_db, is_connected
+from logCall import get_memory_store, log_call, update_call_action
 from models import MultimodalTranscript, ProsodyFeatures, TranscriptSegment, WordTimestamp
 from prosody_analyzer import extract_prosody_features
 from transcriber import start_mock_transcription, transcribe_chunk
@@ -78,9 +79,11 @@ async def health():
 async def db_status():
     """Check MongoDB connection status and document counts."""
     if not is_connected():
+        mem_store = get_memory_store()
         return {
             "connected": False,
             "storage": "in-memory",
+            "in_memory_records": len(mem_store),
             "message": "MongoDB offline. Using in-memory fallback.",
         }
     db = get_db()
@@ -95,6 +98,122 @@ async def db_status():
         return {"connected": False, "error": str(e)}
 
 
+@fastapi_app.get("/calls")
+async def get_calls(limit: int = 50, skip: int = 0):
+    """Get call logs from MongoDB or in-memory store."""
+    db = get_db()
+    
+    if db is None:
+        # In-memory fallback
+        mem_store = get_memory_store()
+        return {
+            "calls": mem_store[skip:skip+limit],
+            "total": len(mem_store),
+            "storage": "in-memory"
+        }
+    
+    try:
+        # Fetch from MongoDB
+        cursor = db.calls.find().sort("created_at", -1).skip(skip).limit(limit)
+        calls = await cursor.to_list(length=limit)
+        total = await db.calls.count_documents({})
+        
+        # Convert ObjectId to string for JSON serialization
+        for call in calls:
+            call["_id"] = str(call["_id"])
+        
+        return {
+            "calls": calls,
+            "total": total,
+            "storage": "MongoDB Atlas"
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch calls: {e}")
+        return {"error": str(e), "calls": [], "total": 0}
+
+
+@fastapi_app.get("/calls/{call_id}")
+async def get_call_details(call_id: str):
+    """Get detailed information about a specific call."""
+    db = get_db()
+    
+    if db is None:
+        # In-memory fallback
+        mem_store = get_memory_store()
+        for call in mem_store:
+            if call.get("_id") == call_id:
+                return {"call": call, "storage": "in-memory"}
+        return {"error": "Call not found", "call_id": call_id}
+    
+    try:
+        from bson import ObjectId
+        call = await db.calls.find_one({"_id": ObjectId(call_id)})
+        
+        if call:
+            call["_id"] = str(call["_id"])
+            return {"call": call, "storage": "MongoDB Atlas"}
+        else:
+            return {"error": "Call not found", "call_id": call_id}
+    except Exception as e:
+        logger.error(f"Failed to fetch call {call_id}: {e}")
+        return {"error": str(e), "call_id": call_id}
+
+
+@fastapi_app.delete("/calls/{call_id}")
+async def delete_call(call_id: str):
+    """Delete a specific call log."""
+    db = get_db()
+    
+    if db is None:
+        # In-memory fallback
+        mem_store = get_memory_store()
+        for i, call in enumerate(mem_store):
+            if call.get("_id") == call_id:
+                mem_store.pop(i)
+                return {"success": True, "message": "Call deleted from in-memory store", "call_id": call_id}
+        return {"success": False, "error": "Call not found", "call_id": call_id}
+    
+    try:
+        from bson import ObjectId
+        result = await db.calls.delete_one({"_id": ObjectId(call_id)})
+        
+        if result.deleted_count > 0:
+            return {"success": True, "message": "Call deleted from MongoDB", "call_id": call_id}
+        else:
+            return {"success": False, "error": "Call not found", "call_id": call_id}
+    except Exception as e:
+        logger.error(f"Failed to delete call {call_id}: {e}")
+        return {"success": False, "error": str(e), "call_id": call_id}
+
+
+@fastapi_app.delete("/calls")
+async def delete_all_calls():
+    """Delete all call logs (use with caution!)."""
+    db = get_db()
+    
+    if db is None:
+        # In-memory fallback
+        mem_store = get_memory_store()
+        count = len(mem_store)
+        mem_store.clear()
+        return {"success": True, "message": f"Deleted {count} calls from in-memory store", "deleted_count": count}
+    
+    try:
+        result = await db.calls.delete_many({})
+        return {"success": True, "message": f"Deleted {result.deleted_count} calls from MongoDB", "deleted_count": result.deleted_count}
+    except Exception as e:
+        logger.error(f"Failed to delete all calls: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@fastapi_app.post("/calls/{call_id}/action")
+async def update_action(call_id: str, action: str, outcome: str = "unknown"):
+    """Update operator action for a call."""
+    db = get_db()
+    await update_call_action(db, call_id, action, outcome)
+    return {"success": True, "call_id": call_id, "action": action, "outcome": outcome}
+
+
 def format_timestamp(elapsed_sec: float) -> str:
     """Format elapsed seconds as HH:MM:SS."""
     hours = int(elapsed_sec // 3600)
@@ -107,6 +226,7 @@ async def emit_analysis_loop(sid: str):
     """
     Continuously analyze the multimodal transcript and emit real-time risk analysis.
     Uses Featherless AI (DeepSeek-V3) for fast, accurate analysis.
+    Logs each analysis to MongoDB for Layer 4 & 5 compliance.
     """
     logger.info(f"Starting REAL AI analysis loop for session {sid}")
     
@@ -130,6 +250,30 @@ async def emit_analysis_loop(sid: str):
             
             t_elapsed = time.time() - t_start
             logger.info(f"✓ AI analysis complete in {t_elapsed:.2f}s - Risk: {analysis.risk_level} ({analysis.risk_score}/100)")
+            
+            # Log to MongoDB (Layer 4 & 5)
+            db = get_db()
+            transcript_text = "\n".join([f"[{seg.time}] {seg.speaker}: {seg.text}" for seg in session.segments])
+            
+            try:
+                record_id = await log_call(
+                    db=db,
+                    session_id=sid,
+                    transcript=transcript_text,
+                    phrases=analysis.triggered_signals,
+                    risk_level=analysis.risk_level,
+                    risk_score=analysis.risk_score,
+                    confidence=analysis.confidence,
+                    reasoning=[analysis.conflict_resolution or analysis.conflict],
+                    agent_verdicts=analysis.agent_breakdown,
+                    triggered_signals=analysis.triggered_signals,
+                    suggested_response=analysis.suggested_response,
+                    operator_action="pending",
+                    outcome="unknown",
+                )
+                logger.info(f"✓ Logged to database: {record_id}")
+            except Exception as log_error:
+                logger.error(f"Failed to log call: {log_error}")
             
             # Emit to frontend
             await sio.emit("analysis_update", analysis.model_dump(), to=sid)
