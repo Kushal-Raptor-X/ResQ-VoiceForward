@@ -1,0 +1,30 @@
+{
+  "data_retention_hours": 72,
+  "stt_confidence_threshold": 0.65,
+  "ml_low_confidence_threshold": 0.45,
+  "ai_disclosure_window_seconds": 30,
+  "early_risk_prediction_minute": 20,
+  "early_signal_window_minutes": [1, 5],
+  "batch_learning_min_samples": 20,
+  "use_postgresql": false,
+  "postgresql_dsn": "",
+  "longitudinal_data_dir": "",
+  "audit_log_path": "",
+  "static_crisis_resources": [
+    {
+      "label": "iCall Psychosocial Helpline (TISS)",
+      "action": "Dial 9152987821 (Mon–Sat, 8am–10pm)",
+      "priority": "HIGH"
+    },
+    {
+      "label": "Vandrevala Foundation",
+      "action": "Dial 1860-2662-345 / 1800-2333-330 (24x7)",
+      "priority": "HIGH"
+    },
+    {
+      "label": "KIRAN Mental Health (GOI)",
+      "action": "Dial 1800-599-0019 (24x7)",
+      "priority": "HIGH"
+    }
+  ]
+}
