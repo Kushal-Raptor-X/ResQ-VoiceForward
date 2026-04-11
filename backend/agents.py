@@ -113,13 +113,13 @@ def _parse_json(content: str) -> dict:
             return {}
 
 
-async def _call_llm(system: str, user: str, max_tokens: int = 400) -> dict:
+async def _call_llm(system: str, user: str, max_tokens: int = 400, model: str = MODEL_NAME) -> dict:
     """Call LLM with retry on rate limit (max 3 attempts, 5s backoff)."""
     async with _llm_semaphore:
         for attempt in range(3):
             try:
                 response = await client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model=model,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
