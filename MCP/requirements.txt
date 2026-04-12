@@ -1,9 +1,0 @@
-mcp
-transformers
-torch
-sentencepiece
-httpx
-scikit-learn
-numpy
-psycopg2-binary
-pytest

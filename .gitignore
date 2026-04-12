@@ -34,5 +34,37 @@ Thumbs.db
 # Kiro IDE settings (personal workflow)
 .kiro/
 
+# Development/testing artifacts
+test_*.py
+*_test.py
+debug_*.py
+diagnose_*.py
+verify_*.py
+check_*.py
+fix_*.py
+mock_*.py
+quick_*.py
+record_*.py
+mongo_audit.py
+RUN_TESTS.bat
+
+# Development documentation
+*_STATUS.md
+*_COMPLETE.md
+*_FIX.md
+*_GUIDE.md
+*_CHECKLIST.md
+*_SUMMARY.md
+*_WORKFLOW.md
+*_IMPACT.md
+QUICK_*.md
+START_*.md
+TEST_*.md
+TROUBLESHOOT_*.md
+READY_*.md
+RECORD_*.md
+RESTORATION_*.md
+SYSTEM_ARCHITECTURE.md
+
 # Logs
 *.log
