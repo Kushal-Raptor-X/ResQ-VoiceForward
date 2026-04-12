@@ -1,4 +1,12 @@
-# Real-time speech transcription using Sarvam AI
+# Real-time speech transcription using Sarvam AI (Saaras V3)
+# 
+# Why Saaras V3?
+# - Streaming support: Lower latency, first tokens appear faster (critical for real-time)
+# - Better accuracy: 19% WER vs 22% WER in V2.5
+# - Code-mixing: Handles Hindi-English mixing naturally (common in Indian calls)
+# - Noise handling: Robust to background noise in call centers
+# - 22 Indian languages + English support
+#
 import asyncio
 import base64
 import io
@@ -27,7 +35,7 @@ if not SARVAM_API_KEY:
     logger.warning("SARVAM_API_KEY not set in environment")
     logger.warning("Check that backend/.env file exists and contains SARVAM_API_KEY")
 else:
-    logger.info(f"Sarvam AI transcriber initialized (key: ...{SARVAM_API_KEY[-8:]})")
+    logger.info(f"Sarvam AI transcriber initialized (Saaras V3, key: ...{SARVAM_API_KEY[-8:]})")
 
 
 
@@ -145,7 +153,7 @@ async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -
                 
                 # Minimal parameters for speed
                 form.add_field('language_code', 'en')
-                form.add_field('model', 'saaras:v2.5')
+                form.add_field('model', 'saaras:v3')  # V3: streaming support, 19% WER, better code-mixing
                 
                 # Make request with Bearer token
                 headers = {
