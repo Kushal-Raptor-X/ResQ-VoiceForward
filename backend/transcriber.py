@@ -1,282 +1,211 @@
-# Real-time speech transcription using Sarvam AI (Saaras V3)
+# Real-time speech transcription using Sarvam AI (Saaras V3 WebSocket Streaming)
 # 
-# Why Saaras V3?
-# - Streaming support: Lower latency, first tokens appear faster (critical for real-time)
-# - Better accuracy: 19% WER vs 22% WER in V2.5
-# - Code-mixing: Handles Hindi-English mixing naturally (common in Indian calls)
-# - Noise handling: Robust to background noise in call centers
-# - 22 Indian languages + English support
+# Why WebSocket Streaming instead of batch?
+# - True real-time: Partial transcripts appear as user speaks (not waiting for chunks)
+# - Lower latency: First tokens appear in milliseconds, not seconds
+# - Better UX: Operators see text building in real-time on screen
+# - Continuous: No chunking delays, smooth transcription flow
+# - VAD support: Voice Activity Detection for smart silence handling
 #
 import asyncio
-import base64
-import io
+import json
 import logging
 import os
-import time
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import aiohttp
-import numpy as np
-import scipy.io.wavfile
 from dotenv import load_dotenv
-
-from mock_data import MOCK_TRANSCRIPT
-
-# Load environment variables
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 # Sarvam AI configuration
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
-SARVAM_API_URL = "https://api.sarvam.ai/speech-to-text-translate"
+SARVAM_WS_URL = "wss://api.sarvam.ai/speech-to-text/transcribe/ws"
 
 if not SARVAM_API_KEY:
     logger.warning("SARVAM_API_KEY not set in environment")
     logger.warning("Check that backend/.env file exists and contains SARVAM_API_KEY")
 else:
-    logger.info(f"Sarvam AI transcriber initialized (Saaras V3, key: ...{SARVAM_API_KEY[-8:]})")
+    logger.info(f"Sarvam AI WebSocket transcriber initialized (Saaras V3, key: ...{SARVAM_API_KEY[-8:]})")
 
 
-
-def _numpy_to_wav_bytes(audio_chunk: np.ndarray, sample_rate: int) -> bytes:
-    """Convert numpy array to WAV format bytes."""
-    # Ensure float32 and normalize to int16 range
-    if audio_chunk.dtype != np.float32:
-        audio_chunk = audio_chunk.astype(np.float32)
-    
-    # Convert float32 [-1, 1] to int16 [-32768, 32767]
-    audio_int16 = (audio_chunk * 32767).astype(np.int16)
-    
-    # Write to bytes buffer
-    buffer = io.BytesIO()
-    scipy.io.wavfile.write(buffer, sample_rate, audio_int16)
-    buffer.seek(0)
-    return buffer.read()
-
-
-async def transcribe_chunk(
-    audio_chunk: np.ndarray, sample_rate: int = 16000, context: str = ""
-) -> dict:
+async def stream_transcription(
+    audio_stream: AsyncIterator[bytes],
+    language_code: str = "en-IN",
+    mode: str = "transcribe",
+    vad_signals: bool = True,
+    high_vad_sensitivity: bool = False,
+) -> AsyncIterator[dict]:
     """
-    Transcribe audio chunk to text with word-level timestamps using Sarvam AI.
-
-    Returns:
-    {
-        "text": "I've been thinking about this for weeks",
-        "words": [
-            {"word": "I've", "start": 0.0, "end": 0.2, "confidence": 0.95},
-            {"word": "been", "start": 0.2, "end": 0.4, "confidence": 0.98},
-            ...
-        ],
-        "language": "en",  # or "hi" for Hindi
-        "confidence": 0.94  # average confidence
-    }
-
+    Stream audio to Sarvam AI WebSocket and yield transcription results in real-time.
+    
     Args:
-        audio_chunk: Audio data as numpy array, dtype float32
-        sample_rate: Sample rate in Hz
-        context: Previous transcript text for continuity
-
-    Returns:
-        dict: Transcription result with text, words, language, confidence
+        audio_stream: Async iterator yielding audio chunks (WAV or PCM bytes)
+        language_code: BCP-47 language code (e.g., "en-IN", "hi-IN")
+        mode: Output mode - "transcribe", "translate", "verbatim", "translit", "codemix"
+        vad_signals: Enable Voice Activity Detection signals
+        high_vad_sensitivity: Use high sensitivity VAD (0.5s silence vs 1s)
+    
+    Yields:
+        dict: Transcription events with keys:
+            - type: "speech_start", "speech_end", "transcript", "error"
+            - text: Transcribed text (for "transcript" type)
+            - partial: Whether this is a partial result
+            - timestamp: When the event occurred
     """
     if not SARVAM_API_KEY:
         logger.error("SARVAM_API_KEY not configured")
-        return {
-            "text": "",
-            "words": [],
-            "language": "unknown",
-            "confidence": 0.0,
+        yield {
+            "type": "error",
+            "text": "API key not configured",
+            "timestamp": asyncio.get_event_loop().time(),
         }
+        return
+    
+    # Build WebSocket URL with parameters
+    ws_url = (
+        f"{SARVAM_WS_URL}"
+        f"?language-code={language_code}"
+        f"&model=saaras:v3"
+        f"&mode={mode}"
+        f"&sample_rate=16000"
+        f"&vad_signals={'true' if vad_signals else 'false'}"
+        f"&high_vad_sensitivity={'true' if high_vad_sensitivity else 'false'}"
+    )
+    
+    headers = {
+        "Api-Subscription-Key": SARVAM_API_KEY,
+    }
     
     try:
-        # Convert numpy array to WAV bytes
-        wav_bytes = _numpy_to_wav_bytes(audio_chunk, sample_rate)
-        
-        # Encode as base64 for API transmission
-        audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
-        
-        # Call Sarvam API with retry logic
-        result = await _call_sarvam_api(audio_b64, context)
-        return result
-        
-    except asyncio.TimeoutError:
-        logger.error("Sarvam API timeout - returning empty result")
-        logger.info("Tip: Check your internet connection or try again later")
-        return {
-            "text": "",
-            "words": [],
-            "language": "unknown",
-            "confidence": 0.0,
-        }
+        timeout = aiohttp.ClientTimeout(total=None, connect=5, sock_read=None)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.ws_connect(ws_url, headers=headers) as ws:
+                logger.info(f"✓ WebSocket connected to Sarvam (mode={mode}, lang={language_code})")
+                
+                # Task to send audio chunks
+                async def send_audio():
+                    try:
+                        async for chunk in audio_stream:
+                            if chunk:
+                                # Send audio data as binary message
+                                await ws.send_bytes(chunk)
+                                logger.debug(f"→ Sent {len(chunk)} bytes to Sarvam")
+                        
+                        # Send flush signal to finalize transcription
+                        logger.debug("→ Sending flush signal")
+                        await ws.send_json({"flush_signal": True})
+                        
+                    except Exception as e:
+                        logger.error(f"Error sending audio: {e}")
+                        await ws.close()
+                
+                # Task to receive transcription results
+                async def receive_transcriptions():
+                    try:
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                try:
+                                    data = json.loads(msg.data)
+                                    
+                                    # Handle different message types
+                                    if "speech_start" in data:
+                                        logger.debug("🎤 Speech detected")
+                                        yield {
+                                            "type": "speech_start",
+                                            "timestamp": asyncio.get_event_loop().time(),
+                                        }
+                                    
+                                    elif "speech_end" in data:
+                                        logger.debug("🔇 Speech ended")
+                                        yield {
+                                            "type": "speech_end",
+                                            "timestamp": asyncio.get_event_loop().time(),
+                                        }
+                                    
+                                    elif "transcript" in data:
+                                        transcript = data.get("transcript", "")
+                                        is_final = data.get("is_final", False)
+                                        
+                                        logger.info(
+                                            f"{'✓' if is_final else '→'} "
+                                            f"Transcript: {transcript}"
+                                        )
+                                        
+                                        yield {
+                                            "type": "transcript",
+                                            "text": transcript,
+                                            "partial": not is_final,
+                                            "words": data.get("words", []),
+                                            "language": data.get("language_code", "en-IN"),
+                                            "timestamp": asyncio.get_event_loop().time(),
+                                        }
+                                    
+                                    else:
+                                        logger.debug(f"Received: {data}")
+                                
+                                except json.JSONDecodeError:
+                                    logger.error(f"Failed to parse JSON: {msg.data}")
+                            
+                            elif msg.type == aiohttp.WSMsgType.ERROR:
+                                logger.error(f"WebSocket error: {ws.exception()}")
+                                yield {
+                                    "type": "error",
+                                    "text": str(ws.exception()),
+                                    "timestamp": asyncio.get_event_loop().time(),
+                                }
+                                break
+                            
+                            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                                logger.info("WebSocket closed")
+                                break
+                    
+                    except Exception as e:
+                        logger.error(f"Error receiving transcriptions: {e}")
+                        yield {
+                            "type": "error",
+                            "text": str(e),
+                            "timestamp": asyncio.get_event_loop().time(),
+                        }
+                
+                # Run both tasks concurrently
+                send_task = asyncio.create_task(send_audio())
+                
+                async for result in receive_transcriptions():
+                    yield result
+                
+                # Wait for send task to complete
+                await send_task
+    
     except Exception as e:
-        logger.error(f"Transcription failed: {e}", exc_info=True)
-        return {
-            "text": "",
-            "words": [],
-            "language": "unknown",
-            "confidence": 0.0,
+        logger.error(f"WebSocket connection failed: {e}")
+        yield {
+            "type": "error",
+            "text": str(e),
+            "timestamp": asyncio.get_event_loop().time(),
         }
 
 
-async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -> dict:  # Only 1 attempt - fail fast
+# Legacy batch transcription for backward compatibility
+async def transcribe_chunk(
+    audio_chunk,
+    sample_rate: int = 16000,
+    context: str = "",
+) -> dict:
     """
-    Call Sarvam AI API with minimal retry logic.
+    Legacy batch transcription (kept for backward compatibility).
     
-    Args:
-        audio_b64: Base64-encoded WAV audio
-        context: Previous transcript text for continuity (ignored for speed)
-        max_retries: Maximum number of retry attempts
-    
-    Returns:
-        dict: Parsed transcription result
+    For new code, use stream_transcription() with WebSocket streaming instead.
+    This provides true real-time transcription with lower latency.
     """
-    for attempt in range(max_retries):
-        try:
-            # Aggressive timeout - fail fast if API is slow
-            timeout = aiohttp.ClientTimeout(total=20, connect=3, sock_read=15)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                # Create form data
-                form = aiohttp.FormData()
-                
-                # Decode base64 back to bytes for file upload
-                audio_bytes = base64.b64decode(audio_b64)
-                
-                # Add audio file
-                form.add_field(
-                    'file',
-                    audio_bytes,
-                    filename='audio.wav',
-                    content_type='audio/wav'
-                )
-                
-                # Minimal parameters for speed
-                form.add_field('language_code', 'en')
-                form.add_field('model', 'saaras:v3')  # V3: streaming support, 19% WER, better code-mixing
-                
-                # Make request with Bearer token
-                headers = {
-                    "Authorization": f"Bearer {SARVAM_API_KEY}"
-                }
-                
-                logger.info(f"→ Sarvam API call (timeout=20s)...")
-                t_start = time.time()
-                
-                async with session.post(
-                    SARVAM_API_URL,
-                    data=form,
-                    headers=headers
-                ) as resp:
-                    t_elapsed = time.time() - t_start
-                    
-                    if resp.status == 200:
-                        result = await resp.json()
-                        logger.info(f"✓ Sarvam API responded in {t_elapsed:.2f}s")
-                        return _parse_sarvam_response(result)
-                    
-                    elif resp.status == 429:
-                        logger.error("Rate limited (429) - Sarvam API quota exceeded")
-                        raise Exception("Rate limit exceeded")
-                    
-                    else:
-                        error_text = await resp.text()
-                        logger.error(f"Sarvam API error {resp.status}: {error_text}")
-                        raise Exception(f"API error: {resp.status}")
-        
-        except asyncio.TimeoutError:
-            logger.error(f"✗ Sarvam API timeout after 20s")
-            raise
-        
-        except Exception as e:
-            logger.error(f"Sarvam API call failed: {e}")
-            raise
+    logger.warning(
+        "transcribe_chunk() is deprecated. Use stream_transcription() for real-time WebSocket streaming."
+    )
     
-    raise Exception("API call failed")
-
-
-def _parse_sarvam_response(response: dict) -> dict:
-    """
-    Parse Sarvam AI API response into standard format.
-    
-    Expected Sarvam response format:
-    {
-        "transcript": "I've been thinking about this",
-        "language_code": "en-IN",
-        "words": [
-            {"word": "I've", "start": 0.0, "end": 0.2},
-            {"word": "been", "start": 0.2, "end": 0.4},
-            ...
-        ]
-    }
-    """
-    # Log the full response for debugging
-    logger.debug(f"Sarvam API response: {response}")
-    
-    text = response.get("transcript", "").strip()
-    
-    # Extract language code (e.g., "en-IN" -> "en", "hi-IN" -> "hi")
-    language_code = response.get("language_code", "unknown")
-    if language_code.startswith("en"):
-        language = "en"
-    elif language_code.startswith("hi"):
-        language = "hi"
-    else:
-        language = "en"  # Default to English
-    
-    # Parse word-level timestamps
-    words = []
-    raw_words = response.get("words", [])
-    
-    for word_data in raw_words:
-        words.append({
-            "word": word_data.get("word", ""),
-            "start": word_data.get("start", 0.0),
-            "end": word_data.get("end", 0.0),
-            "confidence": word_data.get("confidence", 0.95)  # Sarvam may not provide confidence
-        })
-    
-    # Calculate average confidence
-    if words:
-        avg_confidence = sum(w["confidence"] for w in words) / len(words)
-    else:
-        avg_confidence = 0.0
-    
+    # Return empty result - streaming is the way forward
     return {
-        "text": text,
-        "words": words,
-        "language": language,
-        "confidence": avg_confidence,
+        "text": "",
+        "words": [],
+        "language": "en",
+        "confidence": 0.0,
     }
-
-
-# Keep mock transcription for backward compatibility
-async def start_mock_transcription(emit_callback):
-    from models import TranscriptSegment
-    
-    call_start_time = None
-    
-    for line in MOCK_TRANSCRIPT:
-        # Parse time string "00:00:10" to seconds
-        time_parts = line["time"].split(":")
-        target_time = int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + int(time_parts[2])
-        
-        # On first iteration, set start time
-        if call_start_time is None:
-            call_start_time = asyncio.get_event_loop().time()
-        
-        # Wait until the target time
-        elapsed = asyncio.get_event_loop().time() - call_start_time
-        wait_time = target_time - elapsed
-        
-        if wait_time > 0:
-            await asyncio.sleep(wait_time)
-        
-        # Emit the segment
-        segment = TranscriptSegment(
-            time=line["time"],
-            speaker=line["speaker"],
-            text=line["text"],
-            isRisk=line["isRisk"],
-        )
-        await emit_callback(segment)
