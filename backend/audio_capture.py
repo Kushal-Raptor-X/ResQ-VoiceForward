@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 async def stream_audio_chunks(
     source: str = "mic",  # "mic" or path to .wav file
-    chunk_duration_sec: float = 8.0,  # 8 seconds - longer chunks for better Sarvam efficiency
+    chunk_duration_sec: float = 0.1,  # 100ms chunks for real-time streaming
     sample_rate: int = 16000,
 ) -> AsyncIterator[np.ndarray]:
     """
-    Yield audio chunks as numpy arrays.
+    Yield audio chunks as numpy arrays for real-time streaming.
 
     For "mic": use sounddevice.InputStream with callback buffering
     For file path: load with scipy.io.wavfile, slice into chunks, yield with asyncio.sleep
@@ -34,8 +34,8 @@ async def stream_audio_chunks(
 
     Args:
         source: "mic" for microphone or path to .wav file
-        chunk_duration_sec: Duration of each audio chunk in seconds
-        sample_rate: Sample rate in Hz (16000 for Whisper)
+        chunk_duration_sec: Duration of each audio chunk in seconds (default 0.1s = 100ms for real-time)
+        sample_rate: Sample rate in Hz (16000 for Sarvam)
 
     Yields:
         np.ndarray: Audio chunk with shape (sample_rate * chunk_duration_sec,),
@@ -183,5 +183,5 @@ async def _stream_from_file(
 
         yield chunk
 
-        # Simulate real-time playback (5 seconds per chunk)
+        # Simulate real-time playback
         await asyncio.sleep(chunk_duration_sec)

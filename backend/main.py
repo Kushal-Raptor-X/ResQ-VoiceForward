@@ -366,9 +366,10 @@ async def emit_transcript_loop(sid: str):
                     # Final transcript - emit to frontend
                     current_segment_text = text
                     
-                    # Determine speaker (alternating pattern)
-                    num_segments = len(call_sessions[sid].segments)
-                    speaker = "CALLER" if num_segments % 2 == 0 else "OPERATOR"
+                    # For demo: mark all speech as CALLER
+                    # In production: use Sarvam's speaker diarization or voice fingerprinting
+                    # to distinguish between CALLER and OPERATOR
+                    speaker = "CALLER"
                     
                     # Build TranscriptSegment
                     segment = TranscriptSegment(
