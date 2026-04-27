@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 async def stream_audio_chunks(
     source: str = "mic",  # "mic" or path to .wav file
-    chunk_duration_sec: float = 8.0,  # 8 seconds - longer chunks for better Sarvam efficiency
+    chunk_duration_sec: float = 4.0,  # 4 seconds - faster chunks for responsive demo
     sample_rate: int = 16000,
 ) -> AsyncIterator[np.ndarray]:
     """

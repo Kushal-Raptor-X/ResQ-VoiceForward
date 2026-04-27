@@ -298,15 +298,31 @@ async def emit_transcript_loop(sid: str):
     """
     Real audio pipeline: capture → transcribe → extract features → emit.
     Sequential processing with backpressure to prevent queue overflow.
+    Falls back to mock demo script if USE_MOCK_TRANSCRIPT=true.
     """
+    use_mock = os.getenv("USE_MOCK_TRANSCRIPT", "false").lower() == "true"
     audio_source = os.getenv("AUDIO_SOURCE", "mic")
     call_start_time = time.time()
 
-    logger.info(f"Starting audio pipeline for session {sid} with source: {audio_source}")
+    logger.info(f"Starting audio pipeline for session {sid} (mock={use_mock}, source={audio_source})")
 
     # Initialize session
     call_sessions[sid] = MultimodalTranscript()
 
+    if use_mock:
+        # --- Mock demo script path ---
+        try:
+            async def emit_segment(segment):
+                await sio.emit("transcript_update", segment.model_dump(), to=sid)
+                call_sessions[sid].add_segment(segment)
+                logger.info(f"✓ Transcript: [{segment.speaker}] {segment.text[:80]}")
+            
+            await start_mock_transcription(emit_segment)
+        except Exception as e:
+            logger.error(f"Mock transcript error: {e}", exc_info=True)
+        return
+
+    # --- Real Sarvam API path ---
     try:
         chunk_count = 0
         async for audio_chunk in stream_audio_chunks(source=audio_source):

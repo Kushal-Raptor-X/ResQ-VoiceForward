@@ -145,7 +145,7 @@ async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -
                 
                 # Minimal parameters for speed
                 form.add_field('language_code', 'en')
-                form.add_field('model', 'saaras:v2.5')
+                form.add_field('model', 'saaras:v3')
                 
                 # Make request with Bearer token
                 headers = {
