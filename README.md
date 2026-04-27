@@ -1,4 +1,4 @@
-# VoiceForward
+# <img src="icons/main icon.png" alt="VoiceForward Icon" width="24" height="24" /> VoiceForward
 
 ## Run Backend
 ```

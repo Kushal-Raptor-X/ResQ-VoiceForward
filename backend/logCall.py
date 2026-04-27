@@ -44,8 +44,9 @@ async def log_call(
     """
     Persist one call analysis record.
     - Transcript is privacy-filtered before storage (no raw PII in MongoDB).
+    - Uses upsert to update existing session records instead of creating duplicates.
     - Falls back to in-memory if MongoDB is offline.
-    Returns the record _id (MongoDB or UUID string).
+    Returns the record _id (MongoDB ObjectId or UUID string).
     """
     redacted, redactions = privacy_filter(transcript)
     doc = CallDocument(
@@ -73,19 +74,59 @@ async def log_call(
     if db is not None:
         try:
             model = CallModel(db)
-            record_id = await model.save(doc)  # direct await — no shield swallowing errors
+            record_id = await model.upsert(doc)  # Use upsert to avoid duplicate records
             if record_id:
-                print(f"[logCall] ✓ Saved to Atlas (id={record_id}, risk={risk_level})")
+                print(f"[logCall] ✓ Saved/updated in Atlas (id={record_id}, risk={risk_level}, session={session_id})")
                 return record_id
             else:
-                print(f"[logCall] ✗ Atlas save returned None — falling back to memory")
+                print(f"[logCall] ✗ Atlas upsert returned None — falling back to memory")
         except Exception as e:
             print(f"[logCall] ✗ MongoDB write failed: {type(e).__name__}: {e}")
 
-    # In-memory fallback
+    # In-memory fallback - check if session exists and update, otherwise create new
     fallback = doc.to_mongo()
+    fallback.pop("_id", None)
+    
+    for i, existing_doc in enumerate(_memory_store):
+        if existing_doc.get("session_id") == session_id:
+            # Update existing in-memory record
+            existing_doc["risk_level"] = risk_level
+            existing_doc["risk_score"] = risk_score
+            existing_doc["confidence"] = confidence
+            existing_doc["reasoning"] = reasoning
+            existing_doc["agent_verdicts"] = agent_verdicts
+            existing_doc["triggered_signals"] = triggered_signals
+            existing_doc["suggested_response"] = suggested_response
+            existing_doc["operator_action"] = operator_action
+            existing_doc["outcome"] = outcome
+            existing_doc["transparency"] = transparency or {}
+            existing_doc["resources_snapshot"] = resources_snapshot or []
+            
+            # Append phrases (avoid duplicates)
+            for phrase in phrases:
+                if phrase not in existing_doc.get("phrases", []):
+                    existing_doc["phrases"].append(phrase)
+            
+            # Append transcript
+            if transcript:
+                existing_doc["transcript"] = existing_doc.get("transcript", "") + "\n" + transcript
+            
+            # Append to risk_timeline
+            if risk_timeline:
+                existing_doc["risk_timeline"] = existing_doc.get("risk_timeline", []) + risk_timeline
+            
+            # Append privacy_redactions
+            if redactions:
+                existing_doc["privacy_redactions"] = existing_doc.get("privacy_redactions", []) + redactions
+            
+            print(f"[logCall] Updated in-memory (session={session_id}, risk={risk_level})")
+            return existing_doc.get("_id", session_id)
+    
+    # No existing session found - create new
+    import uuid
+    fallback["_id"] = str(uuid.uuid4())
     _memory_store.append(fallback)
-    print(f"[logCall] Stored in-memory (id={fallback['_id']}, risk={risk_level})")
+    print(f"[logCall] Stored new in-memory (id={fallback['_id']}, risk={risk_level}, session={session_id})")
     return fallback["_id"]
 
 

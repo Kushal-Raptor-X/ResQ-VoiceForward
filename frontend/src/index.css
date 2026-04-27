@@ -130,6 +130,20 @@ body { background: #0a0a0a; font-family: var(--font-ui); color: var(--color-text
   gap: var(--space-2);
 }
 
+/* Logo container at top */
+.nav-logo-container {
+  padding: var(--space-4);
+  display: flex;
+  justify-content: center;
+}
+
+/* Logo image */
+.nav-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
 /* Individual tab button - vertical */
 .nav-tab {
   background: transparent;

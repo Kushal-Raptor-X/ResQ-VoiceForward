@@ -100,6 +100,72 @@ class CallModel:
             print(f"[CallModel] Failed to save: {e}")
             return None
 
+    async def get_by_session_id(self, session_id: str) -> Optional[dict]:
+        """Get a call document by session_id."""
+        try:
+            return await self.collection.find_one({"session_id": session_id})
+        except Exception as e:
+            print(f"[CallModel] Failed to get by session_id: {e}")
+            return None
+
+    async def upsert(self, doc: CallDocument) -> Optional[str]:
+        """
+        Upsert a call document based on session_id.
+        If a record with the same session_id exists, update it (append transcript, timeline, etc.).
+        If not, create a new record.
+        Returns the record _id.
+        """
+        try:
+            existing = await self.get_by_session_id(doc.session_id)
+            
+            if existing:
+                # Update existing record - append new data
+                update_ops = {
+                    "$set": {
+                        "risk_level": doc.risk_level,
+                        "risk_score": doc.risk_score,
+                        "confidence": doc.confidence,
+                        "reasoning": doc.reasoning,
+                        "agent_verdicts": doc.agent_verdicts,
+                        "triggered_signals": doc.triggered_signals,
+                        "suggested_response": doc.suggested_response,
+                        "operator_action": doc.operator_action,
+                        "outcome": doc.outcome,
+                        "transparency": doc.transparency,
+                        "resources_snapshot": doc.resources_snapshot,
+                    },
+                    "$push": {
+                        "phrases": {"$each": doc.phrases},
+                    },
+                }
+                
+                # Append to transcript (keep most recent at the end)
+                if doc.transcript:
+                    update_ops["$push"]["transcript"] = doc.transcript
+                
+                # Append to risk_timeline
+                if doc.risk_timeline:
+                    update_ops["$push"]["risk_timeline"] = {"$each": doc.risk_timeline}
+                
+                # Append to privacy_redactions
+                if doc.privacy_redactions:
+                    update_ops["$push"]["privacy_redactions"] = {"$each": doc.privacy_redactions}
+                
+                await self.collection.update_one(
+                    {"session_id": doc.session_id},
+                    update_ops
+                )
+                return str(existing["_id"])
+            else:
+                # Create new record
+                mongo_doc = doc.to_mongo()
+                mongo_doc.pop("_id", None)
+                result = await self.collection.insert_one(mongo_doc)
+                return str(result.inserted_id)
+        except Exception as e:
+            print(f"[CallModel] Failed to upsert: {e}")
+            return None
+
     async def update_action(self, record_id: str, action: str, outcome: str) -> bool:
         """Update operator action for a call."""
         try:

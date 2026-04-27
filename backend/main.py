@@ -100,27 +100,64 @@ async def db_status():
 
 @fastapi_app.get("/calls")
 async def get_calls(limit: int = 50, skip: int = 0):
-    """Get call logs from MongoDB or in-memory store."""
+    """Get call logs from MongoDB or in-memory store.
+    Returns unique calls (one per session_id) with most recent data.
+    """
     db = get_db()
     
     if db is None:
-        # In-memory fallback
+        # In-memory fallback - deduplicate by session_id
         mem_store = get_memory_store()
+        seen_sessions = {}
+        for call in mem_store:
+            session_id = call.get("session_id")
+            if session_id not in seen_sessions:
+                seen_sessions[session_id] = call
+        
+        unique_calls = list(seen_sessions.values())
+        unique_calls.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+        
         return {
-            "calls": mem_store[skip:skip+limit],
-            "total": len(mem_store),
+            "calls": unique_calls[skip:skip+limit],
+            "total": len(unique_calls),
             "storage": "in-memory"
         }
     
     try:
-        # Fetch from MongoDB
-        cursor = db.calls.find().sort("created_at", -1).skip(skip).limit(limit)
-        calls = await cursor.to_list(length=limit)
-        total = await db.calls.count_documents({})
+        # Fetch unique sessions from MongoDB using aggregation
+        # Get the most recent document for each session_id
+        pipeline = [
+            {"$sort": {"created_at": -1}},
+            {
+                "$group": {
+                    "_id": "$session_id",
+                    "call_id": {"$first": "$_id"},
+                    "doc": {"$first": "$$ROOT"}
+                }
+            },
+            {"$sort": {"call_id.created_at": -1}},
+            {"$skip": skip},
+            {"$limit": limit},
+        ]
         
-        # Convert ObjectId to string for JSON serialization
-        for call in calls:
-            call["_id"] = str(call["_id"])
+        cursor = db.calls.aggregate(pipeline)
+        results = await cursor.to_list(length=limit)
+        
+        # Extract the full document from the grouped result
+        calls = []
+        for result in results:
+            doc = result.get("doc", {})
+            doc["_id"] = str(result.get("call_id"))
+            calls.append(doc)
+        
+        # Get total unique session count
+        total_pipeline = [
+            {"$group": {"_id": "$session_id"}},
+            {"$count": "total"}
+        ]
+        total_cursor = db.calls.aggregate(total_pipeline)
+        total_result = await total_cursor.to_list(length=1)
+        total = total_result[0].get("total", 0) if total_result else 0
         
         return {
             "calls": calls,
@@ -129,6 +166,7 @@ async def get_calls(limit: int = 50, skip: int = 0):
         }
     except Exception as e:
         logger.error(f"Failed to fetch calls: {e}")
+        return {"error": str(e), "calls": [], "total": 0}
         return {"error": str(e), "calls": [], "total": 0}
 
 

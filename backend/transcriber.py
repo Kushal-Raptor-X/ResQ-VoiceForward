@@ -12,6 +12,7 @@ import numpy as np
 import scipy.io.wavfile
 from dotenv import load_dotenv
 
+from key_manager import key_manager, get_sarvam_key, report_key_error, report_key_success, KeyStatus
 from mock_data import MOCK_TRANSCRIPT
 
 # Load environment variables
@@ -20,14 +21,16 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Sarvam AI configuration
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
 SARVAM_API_URL = "https://api.sarvam.ai/speech-to-text-translate"
 
-if not SARVAM_API_KEY:
-    logger.warning("SARVAM_API_KEY not set in environment")
-    logger.warning("Check that backend/.env file exists and contains SARVAM_API_KEY")
+# Get initial key status
+key_status = key_manager.get_status()
+if key_status["total_keys"] > 0:
+    logger.info(f"Sarvam AI transcriber initialized with {key_status['total_keys']} keys")
+    logger.info(f"Current key: {key_status['current_key']}")
 else:
-    logger.info(f"Sarvam AI transcriber initialized (key: ...{SARVAM_API_KEY[-8:]})")
+    logger.warning("No valid Sarvam API keys found!")
+    logger.warning("Add keys to .env file: SARVAM_API_KEY_1, SARVAM_API_KEY_2, SARVAM_API_KEY_3")
 
 
 
@@ -81,8 +84,10 @@ async def transcribe_chunk(
     Returns:
         dict: Transcription result with text, words, language, confidence, and speaker info
     """
-    if not SARVAM_API_KEY:
-        logger.error("SARVAM_API_KEY not configured")
+    sarvam_key = get_sarvam_key()
+    
+    if not sarvam_key:
+        logger.error("No valid Sarvam API key available")
         return {
             "text": "",
             "words": [],
@@ -99,7 +104,7 @@ async def transcribe_chunk(
         audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
         
         # Call Sarvam API with retry logic
-        result = await _call_sarvam_api(audio_b64, context, enable_diarization, num_speakers)
+        result = await _call_sarvam_api(audio_b64, context, enable_diarization, num_speakers, sarvam_key)
         return result
         
     except asyncio.TimeoutError:
@@ -124,7 +129,7 @@ async def transcribe_chunk(
 
 
 async def _call_sarvam_api(audio_b64: str, context: str, enable_diarization: bool = True, 
-                          num_speakers: int = 2, max_retries: int = 1) -> dict:  # Only 1 attempt - fail fast
+                          num_speakers: int = 2, sarvam_key: str = "", max_retries: int = 1) -> dict:
     """
     Call Sarvam AI API with minimal retry logic.
     
@@ -133,6 +138,7 @@ async def _call_sarvam_api(audio_b64: str, context: str, enable_diarization: boo
         context: Previous transcript text for continuity (ignored for speed)
         enable_diarization: Enable speaker diarization
         num_speakers: Expected number of speakers
+        sarvam_key: The API key to use for this call
         max_retries: Maximum number of retry attempts
     
     Returns:
@@ -171,7 +177,7 @@ async def _call_sarvam_api(audio_b64: str, context: str, enable_diarization: boo
                 
                 # Make request with Bearer token
                 headers = {
-                    "Authorization": f"Bearer {SARVAM_API_KEY}"
+                    "Authorization": f"Bearer {sarvam_key}"
                 }
                 
                 t_start = time.time()
@@ -186,10 +192,12 @@ async def _call_sarvam_api(audio_b64: str, context: str, enable_diarization: boo
                     if resp.status == 200:
                         result = await resp.json()
                         logger.info(f"✓ Sarvam API responded in {t_elapsed:.2f}s")
+                        report_key_success()  # Mark this key usage as successful
                         return _parse_sarvam_response(result, enable_diarization)
                     
                     elif resp.status == 429:
                         logger.error("Rate limited (429) - Sarvam API quota exceeded")
+                        report_key_error(KeyStatus.RATE_LIMITED, "Rate limit exceeded")
                         raise Exception("Rate limit exceeded")
                     
                     else:
@@ -198,11 +206,15 @@ async def _call_sarvam_api(audio_b64: str, context: str, enable_diarization: boo
                         # If diarization fails, retry without it
                         if enable_diarization and "diarization" in error_text.lower():
                             logger.warning("Diarization not supported, retrying without it...")
-                            return await _call_sarvam_api(audio_b64, context, False, num_speakers, max_retries)
+                            return await _call_sarvam_api(audio_b64, context, False, num_speakers, sarvam_key, max_retries)
+                        
+                        # Mark key as invalid for other errors
+                        report_key_error(KeyStatus.INVALID, f"API error: {resp.status}")
                         raise Exception(f"API error: {resp.status}")
         
         except asyncio.TimeoutError:
             logger.error(f"✗ Sarvam API timeout after 20s")
+            report_key_error(KeyStatus.INVALID, "Timeout")
             raise
         
         except Exception as e:

@@ -3,6 +3,9 @@ export default function NavBar({ activeTab, onTabChange }) {
 
   return (
     <nav className="nav-bar">
+      <div className="nav-logo-container">
+        <img src="/icons/main icon.png" alt="ResQ VoiceForward" className="nav-logo" />
+      </div>
       {tabs.map((tab) => (
         <button
           key={tab}

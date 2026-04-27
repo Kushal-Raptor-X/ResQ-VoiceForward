@@ -6,6 +6,7 @@ export default function CallHistoryView() {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [storage, setStorage] = useState("unknown");
+  const [expandedCallId, setExpandedCallId] = useState(null);
 
   useEffect(() => {
     fetchCalls();
@@ -117,6 +118,53 @@ export default function CallHistoryView() {
     return colorMap[level] || "var(--color-border)";
   };
 
+  const toggleExpand = (callId) => {
+    setExpandedCallId(expandedCallId === callId ? null : callId);
+  };
+
+  const formatTranscriptLine = (line, index) => {
+    // Handle both string and object formats
+    const text = typeof line === "string" ? line : line.text;
+    const speaker = typeof line === "string" ? (line.includes("OPERATOR") ? "OPERATOR" : "CALLER") : (line.speaker || "CALLER");
+    const isRisk = typeof line === "string" ? line.includes("[FLAGGED]") : line.isRisk;
+    const timestamp = typeof line === "string" ? line.match(/^\d{2}:\d{2}:\d{2}/)?.[0] : line.time;
+
+    return (
+      <div
+        key={index}
+        style={{
+          display: "flex",
+          gap: "var(--space-3)",
+          padding: "var(--space-2) 0",
+          borderBottom: "1px solid var(--color-border)",
+        }}
+      >
+        <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)", minWidth: "60px" }}>
+          {timestamp || "00:00:00"}
+        </span>
+        <span
+          style={{
+            color: speaker === "OPERATOR" ? "var(--color-text-secondary)" : "var(--color-text-primary)",
+            fontWeight: "var(--font-weight-medium)",
+            minWidth: "70px",
+          }}
+        >
+          {speaker}:
+        </span>
+        <span
+          style={{
+            color: isRisk ? "var(--highlight-risk-text)" : "var(--color-text-primary)",
+            background: isRisk ? "var(--highlight-risk)" : "transparent",
+            padding: isRisk ? "2px 4px" : "0",
+            borderRadius: "2px",
+          }}
+        >
+          {text}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard-view">
       <div className="panel-card">
@@ -210,7 +258,10 @@ export default function CallHistoryView() {
                 borderRadius: "4px",
                 marginBottom: "var(--space-3)",
                 padding: "var(--space-4)",
+                cursor: "pointer",
+                transition: "border-color 0.2s ease",
               }}
+              onClick={() => toggleExpand(call._id)}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "var(--space-3)" }}>
                 <div>
@@ -238,7 +289,10 @@ export default function CallHistoryView() {
                     {call.risk_level || "UNKNOWN"}
                   </span>
                   <button
-                    onClick={() => deleteCall(call._id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCall(call._id);
+                    }}
                     style={{
                       background: "var(--btn-reject-bg)",
                       border: "1px solid var(--risk-high-border)",
@@ -274,6 +328,66 @@ export default function CallHistoryView() {
                   <div className="section-label" style={{ marginBottom: "var(--space-1)" }}>Transcript Preview</div>
                   <div style={{ maxHeight: "60px", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {call.transcript.substring(0, 200)}...
+                  </div>
+                </div>
+              )}
+              
+              {/* Expanded Transcript View */}
+              {expandedCallId === call._id && call.transcript && (
+                <div
+                  style={{
+                    marginTop: "var(--space-4)",
+                    paddingTop: "var(--space-4)",
+                    borderTop: "1px solid var(--color-border)",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
+                    <div className="section-label">Full Transcript</div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedCallId(null);
+                      }}
+                      style={{
+                        background: "var(--color-bg-panel)",
+                        border: "1px solid var(--color-border)",
+                        borderRadius: "4px",
+                        color: "var(--color-text-secondary)",
+                        cursor: "pointer",
+                        fontSize: "var(--font-size-xs)",
+                        padding: "2px 8px",
+                      }}
+                    >
+                      Collapse
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      background: "var(--color-bg-panel)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "4px",
+                      padding: "var(--space-3)",
+                      maxHeight: "300px",
+                      overflowY: "auto",
+                      fontFamily: "var(--font-ui)",
+                      fontSize: "var(--font-size-xs)",
+                    }}
+                  >
+                    {/* Handle transcript as either string or array */}
+                    {Array.isArray(call.transcript)
+                      ? call.transcript.map((line, idx) => formatTranscriptLine(line, idx))
+                      : call.transcript.split("\n").map((line, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: "var(--space-2) 0",
+                              borderBottom: idx < call.transcript.split("\n").length - 1 ? "1px solid var(--color-border)" : "none",
+                            }}
+                          >
+                            {line}
+                          </div>
+                        ))}
                   </div>
                 </div>
               )}
