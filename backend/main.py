@@ -361,26 +361,44 @@ async def emit_transcript_loop(sid: str):
             num_segments = len(call_sessions[sid].segments)
             speaker = "CALLER" if num_segments % 2 == 0 else "OPERATOR"
 
-            # Build TranscriptSegment
-            segment = TranscriptSegment(
-                time=format_timestamp(elapsed),
-                speaker=speaker,
-                text=transcript_data["text"],
-                words=[WordTimestamp(**w) for w in transcript_data["words"]],
-                language=transcript_data["language"],
-                prosody=ProsodyFeatures(**prosody) if isinstance(prosody, dict) else prosody,
-                ambient=ambient,
-                isRisk=False,  # Will be set by analyzer
-            )
+            # Handle speaker diarization if available
+            speaker_segments = transcript_data.get("speaker_segments", [])
+            
+            if speaker_segments:
+                # Use diarization to create separate segments per speaker
+                for seg in speaker_segments:
+                    segment = TranscriptSegment(
+                        time=format_timestamp(elapsed + seg["start"]),
+                        speaker=seg["speaker"],
+                        text=seg["text"],
+                        words=[],  # Diarization may not provide word-level timestamps
+                        language=transcript_data["language"],
+                        prosody=ProsodyFeatures(**prosody) if isinstance(prosody, dict) else prosody,
+                        ambient=ambient,
+                        isRisk=False,
+                    )
+                    call_sessions[sid].add_segment(segment)
+                    await sio.emit("transcript_update", segment.model_dump(), to=sid)
+                    logger.info(f"[Chunk {chunk_count}] ✓ Transcript: [{segment.speaker}] {segment.text[:80]}")
+            else:
+                # Build TranscriptSegment
+                segment = TranscriptSegment(
+                    time=format_timestamp(elapsed),
+                    speaker=speaker,
+                    text=transcript_data["text"],
+                    words=[WordTimestamp(**w) for w in transcript_data["words"]],
+                    language=transcript_data["language"],
+                    prosody=ProsodyFeatures(**prosody) if isinstance(prosody, dict) else prosody,
+                    ambient=ambient,
+                    isRisk=False,  # Will be set by analyzer
+                )
 
-            # Add to session
-            call_sessions[sid].add_segment(segment)
+                # Add to session
+                call_sessions[sid].add_segment(segment)
 
-            # Compute baseline prosody from first 60 seconds
-            if elapsed < 60 and not call_sessions[sid].baseline_prosody:
-                # Use first segment's prosody as baseline
-                if segment.prosody.speaking_rate_wpm is not None:
-                    call_sessions[sid].baseline_prosody = segment.prosody
+                # Emit to frontend
+                await sio.emit("transcript_update", segment.model_dump(), to=sid)
+                logger.info(f"[Chunk {chunk_count}] ✓ Transcript: [{segment.speaker}] {segment.text[:80]}")
 
             t_build = time.time()
 

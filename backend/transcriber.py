@@ -48,30 +48,38 @@ def _numpy_to_wav_bytes(audio_chunk: np.ndarray, sample_rate: int) -> bytes:
 
 
 async def transcribe_chunk(
-    audio_chunk: np.ndarray, sample_rate: int = 16000, context: str = ""
+    audio_chunk: np.ndarray, sample_rate: int = 16000, context: str = "",
+    enable_diarization: bool = True, num_speakers: int = 2
 ) -> dict:
     """
     Transcribe audio chunk to text with word-level timestamps using Sarvam AI.
+    Supports speaker diarization to distinguish between speakers.
 
     Returns:
     {
         "text": "I've been thinking about this for weeks",
         "words": [
-            {"word": "I've", "start": 0.0, "end": 0.2, "confidence": 0.95},
-            {"word": "been", "start": 0.2, "end": 0.4, "confidence": 0.98},
+            {"word": "I've", "start": 0.0, "end": 0.2, "confidence": 0.95, "speaker": "SPEAKER_00"},
+            {"word": "been", "start": 0.2, "end": 0.4, "confidence": 0.98, "speaker": "SPEAKER_00"},
             ...
         ],
         "language": "en",  # or "hi" for Hindi
-        "confidence": 0.94  # average confidence
+        "confidence": 0.94,  # average confidence
+        "speaker_segments": [
+            {"speaker": "SPEAKER_00", "text": "...", "start": 0.0, "end": 2.5},
+            {"speaker": "SPEAKER_01", "text": "...", "start": 2.5, "end": 4.0}
+        ]
     }
 
     Args:
         audio_chunk: Audio data as numpy array, dtype float32
         sample_rate: Sample rate in Hz
         context: Previous transcript text for continuity
+        enable_diarization: Enable speaker diarization (default: True)
+        num_speakers: Expected number of speakers (default: 2)
 
     Returns:
-        dict: Transcription result with text, words, language, confidence
+        dict: Transcription result with text, words, language, confidence, and speaker info
     """
     if not SARVAM_API_KEY:
         logger.error("SARVAM_API_KEY not configured")
@@ -80,6 +88,7 @@ async def transcribe_chunk(
             "words": [],
             "language": "unknown",
             "confidence": 0.0,
+            "speaker_segments": [],
         }
     
     try:
@@ -90,7 +99,7 @@ async def transcribe_chunk(
         audio_b64 = base64.b64encode(wav_bytes).decode('utf-8')
         
         # Call Sarvam API with retry logic
-        result = await _call_sarvam_api(audio_b64, context)
+        result = await _call_sarvam_api(audio_b64, context, enable_diarization, num_speakers)
         return result
         
     except asyncio.TimeoutError:
@@ -101,6 +110,7 @@ async def transcribe_chunk(
             "words": [],
             "language": "unknown",
             "confidence": 0.0,
+            "speaker_segments": [],
         }
     except Exception as e:
         logger.error(f"Transcription failed: {e}", exc_info=True)
@@ -109,20 +119,24 @@ async def transcribe_chunk(
             "words": [],
             "language": "unknown",
             "confidence": 0.0,
+            "speaker_segments": [],
         }
 
 
-async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -> dict:  # Only 1 attempt - fail fast
+async def _call_sarvam_api(audio_b64: str, context: str, enable_diarization: bool = True, 
+                          num_speakers: int = 2, max_retries: int = 1) -> dict:  # Only 1 attempt - fail fast
     """
     Call Sarvam AI API with minimal retry logic.
     
     Args:
         audio_b64: Base64-encoded WAV audio
         context: Previous transcript text for continuity (ignored for speed)
+        enable_diarization: Enable speaker diarization
+        num_speakers: Expected number of speakers
         max_retries: Maximum number of retry attempts
     
     Returns:
-        dict: Parsed transcription result
+        dict: Parsed transcription result with speaker information
     """
     for attempt in range(max_retries):
         try:
@@ -147,12 +161,19 @@ async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -
                 form.add_field('language_code', 'en')
                 form.add_field('model', 'saaras:v3')
                 
+                # Diarization parameters
+                if enable_diarization:
+                    form.add_field('enable_speaker_diarization', 'true')
+                    form.add_field('num_speakers', str(num_speakers))
+                    logger.info(f"→ Sarvam API call with diarization (num_speakers={num_speakers})...")
+                else:
+                    logger.info(f"→ Sarvam API call without diarization...")
+                
                 # Make request with Bearer token
                 headers = {
                     "Authorization": f"Bearer {SARVAM_API_KEY}"
                 }
                 
-                logger.info(f"→ Sarvam API call (timeout=20s)...")
                 t_start = time.time()
                 
                 async with session.post(
@@ -165,7 +186,7 @@ async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -
                     if resp.status == 200:
                         result = await resp.json()
                         logger.info(f"✓ Sarvam API responded in {t_elapsed:.2f}s")
-                        return _parse_sarvam_response(result)
+                        return _parse_sarvam_response(result, enable_diarization)
                     
                     elif resp.status == 429:
                         logger.error("Rate limited (429) - Sarvam API quota exceeded")
@@ -174,6 +195,10 @@ async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -
                     else:
                         error_text = await resp.text()
                         logger.error(f"Sarvam API error {resp.status}: {error_text}")
+                        # If diarization fails, retry without it
+                        if enable_diarization and "diarization" in error_text.lower():
+                            logger.warning("Diarization not supported, retrying without it...")
+                            return await _call_sarvam_api(audio_b64, context, False, num_speakers, max_retries)
                         raise Exception(f"API error: {resp.status}")
         
         except asyncio.TimeoutError:
@@ -187,9 +212,10 @@ async def _call_sarvam_api(audio_b64: str, context: str, max_retries: int = 1) -
     raise Exception("API call failed")
 
 
-def _parse_sarvam_response(response: dict) -> dict:
+def _parse_sarvam_response(response: dict, enable_diarization: bool = True) -> dict:
     """
     Parse Sarvam AI API response into standard format.
+    Supports speaker diarization if enabled.
     
     Expected Sarvam response format:
     {
@@ -199,8 +225,19 @@ def _parse_sarvam_response(response: dict) -> dict:
             {"word": "I've", "start": 0.0, "end": 0.2},
             {"word": "been", "start": 0.2, "end": 0.4},
             ...
+        ],
+        "speaker_segments": [
+            {"speaker": "SPEAKER_00", "text": "I've been thinking", "start": 0.0, "end": 1.5},
+            {"speaker": "SPEAKER_01", "text": "about this for weeks", "start": 1.5, "end": 3.0}
         ]
     }
+    
+    Args:
+        response: Raw API response
+        enable_diarization: Whether diarization was requested
+    
+    Returns:
+        dict: Parsed transcription with speaker info
     """
     # Log the full response for debugging
     logger.debug(f"Sarvam API response: {response}")
@@ -221,12 +258,16 @@ def _parse_sarvam_response(response: dict) -> dict:
     raw_words = response.get("words", [])
     
     for word_data in raw_words:
-        words.append({
+        word_info = {
             "word": word_data.get("word", ""),
             "start": word_data.get("start", 0.0),
             "end": word_data.get("end", 0.0),
-            "confidence": word_data.get("confidence", 0.95)  # Sarvam may not provide confidence
-        })
+            "confidence": word_data.get("confidence", 0.95)
+        }
+        # Add speaker label if diarization is enabled and available
+        if enable_diarization and "speaker" in word_data:
+            word_info["speaker"] = word_data["speaker"]
+        words.append(word_info)
     
     # Calculate average confidence
     if words:
@@ -234,12 +275,84 @@ def _parse_sarvam_response(response: dict) -> dict:
     else:
         avg_confidence = 0.0
     
+    # Parse speaker segments if available
+    speaker_segments = []
+    if enable_diarization:
+        raw_segments = response.get("speaker_segments", [])
+        for seg in raw_segments:
+            speaker_segments.append({
+                "speaker": seg.get("speaker", "UNKNOWN"),
+                "text": seg.get("text", ""),
+                "start": seg.get("start", 0.0),
+                "end": seg.get("end", 0.0)
+            })
+        
+        # If no speaker_segments but words have speaker info, build segments from words
+        if not speaker_segments and words and any("speaker" in w for w in words):
+            speaker_segments = _build_speaker_segments_from_words(words)
+    
     return {
         "text": text,
         "words": words,
         "language": language,
         "confidence": avg_confidence,
+        "speaker_segments": speaker_segments,
     }
+
+
+def _build_speaker_segments_from_words(words: list) -> list:
+    """
+    Build speaker segments from word-level speaker labels.
+    Groups consecutive words by the same speaker.
+    
+    Args:
+        words: List of word dicts with speaker labels
+    
+    Returns:
+        list: Speaker segments with text, start, end
+    """
+    if not words:
+        return []
+    
+    segments = []
+    current_speaker = None
+    current_words = []
+    current_start = 0.0
+    
+    for word in words:
+        speaker = word.get("speaker", "UNKNOWN")
+        
+        if current_speaker is None:
+            # First word
+            current_speaker = speaker
+            current_words = [word["word"]]
+            current_start = word["start"]
+        elif speaker == current_speaker:
+            # Same speaker, continue
+            current_words.append(word["word"])
+        else:
+            # Speaker changed, save current segment
+            segments.append({
+                "speaker": current_speaker,
+                "text": " ".join(current_words),
+                "start": current_start,
+                "end": word["start"]  # End at start of next word
+            })
+            # Start new segment
+            current_speaker = speaker
+            current_words = [word["word"]]
+            current_start = word["start"]
+    
+    # Don't forget the last segment
+    if current_words:
+        segments.append({
+            "speaker": current_speaker,
+            "text": " ".join(current_words),
+            "start": current_start,
+            "end": words[-1]["end"]
+        })
+    
+    return segments
 
 
 # Keep mock transcription for backward compatibility
