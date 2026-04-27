@@ -65,6 +65,13 @@ READY_*.md
 RECORD_*.md
 RESTORATION_*.md
 SYSTEM_ARCHITECTURE.md
+DEMO_SCRIPT.md
+
+# Development scripts & setup files
+start.bat
+start.sh
+test_audio_capture.py
+
 
 # Logs
 *.log
