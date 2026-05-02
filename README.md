@@ -4,7 +4,7 @@
 ```
 cd backend
 pip install -r requirements.txt
-cp .env.example .env   # add your Featherless API key
+cp .env.example .env   # add your Featherless, Sarvam & MongoDb API key
 uvicorn main:app --reload --port 8000
 ```
 
